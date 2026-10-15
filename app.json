@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "MauGainZ",
+    "slug": "maugains",
+    "version": "2.1.4",
+    "orientation": "default",
+    "icon": "./assets/branding/maugainz-v2-black.png",
+    "splash": {
+      "image": "./assets/branding/maugainz-v2-transparent.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0C09"
+    },
+    "userInterfaceStyle": "dark",
+    "androidStatusBar": {
+      "backgroundColor": "#0B0C09",
+      "barStyle": "light-content"
+    },
+    "android": {
+      "package": "com.maugains.cookbook",
+      "versionCode": 10,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/branding/maugainz-v2-transparent.png",
+        "backgroundColor": "#0B0C09"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      "expo-font",
+      "expo-image-picker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow MauGainZ to scan food barcodes",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "rn-mlkit-ocr",
+        {
+          "ocrModels": ["latin"],
+          "ocrUseBundled": true
+        }
+      ]
+    ]
+  }
+}
