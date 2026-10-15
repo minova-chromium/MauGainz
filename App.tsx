@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   PanResponder,
   Platform,
@@ -30,6 +31,7 @@ import { CookingMode, PlannerScreen, SettingsModal } from './src/ProFeatures';
 import { IngredientLookupModal, RecipeImportModal } from './src/SmartModals';
 import { enrichIngredients } from './src/smartFeatures';
 import { BackupPayload, cloudConfigured, createSyncCode, downloadCloudBackup, uploadCloudBackup } from './src/cloudSync';
+import { APP_VERSION, AppUpdate, checkForAppUpdate } from './src/updater';
 
 const STORAGE_KEY = '@maugains/recipes-v1';
 const LOCALE_KEY = '@maugains/locale-v1';
@@ -147,6 +149,40 @@ function Header({ eyebrow, title, action }: { eyebrow: string; title: string; ac
       </View>
       {action}
     </View>
+  );
+}
+
+function UpdateModal({ update, locale, onClose }: { update: AppUpdate | null; locale: Locale; onClose: () => void }) {
+  const install = async () => {
+    if (!update) return;
+    try {
+      await Linking.openURL(update.downloadUrl);
+    } catch {
+      Alert.alert('MauGainZ', t(locale, 'The download could not be opened. Try the release page instead.', 'De download kon niet worden geopend. Probeer de releasepagina.'));
+      Linking.openURL(update.releaseUrl).catch(() => undefined);
+    }
+  };
+
+  return (
+    <Modal visible={!!update} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.updateBackdrop}>
+        <View style={styles.updateCard}>
+          <View style={styles.updateIcon}>{icon('arrow-up-circle', 32, colors.black)}</View>
+          <Text style={styles.updateEyebrow}>{t(locale, 'NEW VERSION AVAILABLE', 'NIEUWE VERSIE BESCHIKBAAR')}</Text>
+          <Text style={styles.updateTitle}>{update?.title}</Text>
+          <Text style={styles.updateVersion}>{t(locale, 'Installed', 'Geïnstalleerd')} {APP_VERSION}  →  {update?.version}</Text>
+          {!!update?.notes && <Text style={styles.updateNotes} numberOfLines={7}>{update.notes}</Text>}
+          <Text style={styles.updateHint}>{t(locale, 'Android will ask you to confirm the APK installation after downloading.', 'Android vraagt na het downloaden om de installatie van de APK te bevestigen.')}</Text>
+          <Pressable onPress={install} style={({ pressed }) => [styles.updatePrimary, pressed && styles.pressed]}>
+            {icon('download-outline', 20, colors.black)}
+            <Text style={styles.updatePrimaryText}>{t(locale, 'DOWNLOAD UPDATE', 'UPDATE DOWNLOADEN')}</Text>
+          </Pressable>
+          <Pressable onPress={onClose} style={styles.updateLater}>
+            <Text style={styles.updateLaterText}>{t(locale, 'Not now', 'Niet nu')}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -976,6 +1012,7 @@ export default function App() {
   const [syncCode, setSyncCode] = useState(createSyncCode);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | undefined>();
   const [hydrated, setHydrated] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdate | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -1007,6 +1044,13 @@ export default function App() {
   useEffect(() => { if (hydrated) AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify({ unitSystem })).catch(() => undefined); }, [unitSystem, hydrated]);
   useEffect(() => { if (hydrated) AsyncStorage.setItem(INGREDIENT_HISTORY_KEY, JSON.stringify(recentIngredientNames)).catch(() => undefined); }, [recentIngredientNames, hydrated]);
   useEffect(() => { if (hydrated) AsyncStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify({ syncCode, lastSyncedAt })).catch(() => undefined); }, [syncCode, lastSyncedAt, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || Platform.OS !== 'android') return;
+    let active = true;
+    checkForAppUpdate().then((update) => { if (active && update) setAvailableUpdate(update); });
+    return () => { active = false; };
+  }, [hydrated]);
 
   const builtInCategoryStyles: CategoryOption[] = categories.slice(1).map((name) => ({
     name, color: accentForCategory(name), icon: name === 'Breakfast' ? 'sunny-outline' : name === 'High calorie' ? 'flame-outline' : name === 'Quick meal' ? 'flash-outline' : 'nutrition-outline'
@@ -1079,6 +1123,7 @@ export default function App() {
       <RecipeDetail recipe={selectedLive} visible={!!selectedLive} locale={locale} tablet={tablet} unitSystem={unitSystem} onClose={() => setSelectedRecipe(null)} onFavorite={toggleFavorite} onDelete={deleteRecipe} onEdit={editRecipe} onDuplicate={duplicateRecipe} onShare={shareRecipe} onCook={(recipe) => { setSelectedRecipe(null); setCookingRecipe(recipe); }} onAddShopping={(recipe) => { addRecipeToShopping(recipe); Alert.alert('MauGainZ', t(locale, 'Added to your shopping list.', 'Toegevoegd aan je boodschappenlijst.')); }} />
       {cookingRecipe && <CookingMode recipe={cookingRecipe} locale={locale} onClose={() => setCookingRecipe(null)} />}
       <SettingsModal visible={settingsVisible} locale={locale} categories={customCategories} goals={goals} unitSystem={unitSystem} backupText={backupText} cloudReady={cloudConfigured} syncCode={syncCode} lastSyncedAt={lastSyncedAt} onSyncCode={setSyncCode} onCloudUpload={cloudUpload} onCloudDownload={cloudDownload} onClose={() => setSettingsVisible(false)} onGoals={setGoals} onUnitSystem={setUnitSystem} onRenameCategory={renameCategory} onDeleteCategory={deleteCategory} onCategoryStyle={styleCategory} onExport={exportBackup} onImport={importBackup} />
+      <UpdateModal update={availableUpdate} locale={locale} onClose={() => setAvailableUpdate(null)} />
     </SafeAreaView>
   );
 }
@@ -1381,5 +1426,17 @@ const styles = StyleSheet.create({
   createNavButton: { width: 49, height: 49, borderRadius: 17, backgroundColor: colors.lime, transform: [{ rotate: '0deg' }] },
   createNavButtonActive: { backgroundColor: colors.cream },
   languageNavButton: { width: 34, height: 30, alignItems: 'center', justifyContent: 'center' },
-  languageNavLabel: { color: colors.blue, fontSize: 8, fontWeight: '900', marginTop: 1 }
+  languageNavLabel: { color: colors.blue, fontSize: 8, fontWeight: '900', marginTop: 1 },
+  updateBackdrop: { flex: 1, backgroundColor: '#000000CC', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  updateCard: { width: '100%', maxWidth: 520, borderRadius: 28, backgroundColor: colors.panel, borderWidth: 1, borderColor: '#D2A74A55', padding: 26, alignItems: 'center' },
+  updateIcon: { width: 62, height: 62, borderRadius: 20, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  updateEyebrow: { color: colors.lime, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  updateTitle: { color: colors.cream, fontSize: 25, lineHeight: 31, fontWeight: '900', textAlign: 'center', marginTop: 7 },
+  updateVersion: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 8 },
+  updateNotes: { width: '100%', color: colors.cream, fontSize: 12, lineHeight: 19, marginTop: 18, padding: 14, borderRadius: 15, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line },
+  updateHint: { color: colors.muted, fontSize: 10, lineHeight: 16, textAlign: 'center', marginTop: 16 },
+  updatePrimary: { width: '100%', height: 54, borderRadius: 16, backgroundColor: colors.lime, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 20 },
+  updatePrimaryText: { color: colors.black, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
+  updateLater: { minHeight: 44, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center', marginTop: 5 },
+  updateLaterText: { color: colors.muted, fontSize: 11, fontWeight: '800' }
 });

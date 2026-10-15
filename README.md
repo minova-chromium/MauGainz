@@ -2,6 +2,12 @@
 
 An Android-first performance cookbook for building recipes, tracking exact ingredient amounts, following preparation step by step, and recording per-serving macros. MauGainZ includes English and Dutch interfaces, responsive phone/tablet layouts, drag ordering, Open Food Facts nutrition lookup, barcode scanning, and recipe import from websites, photos, or pasted text.
 
+## Download
+
+Download the newest universal Android APK from [GitHub Releases](https://github.com/minova-chromium/MauGainz/releases/latest). Android may ask you to allow APK installation from your browser the first time.
+
+MauGainZ checks the latest official GitHub release when the app starts. When a newer semantic version is available, an in-app English/Dutch update screen links directly to the universal APK. Android always keeps the final installation confirmation under the user's control.
+
 ## Smart features
 
 - Drag ingredients and preparation steps from the handle on the left.
@@ -37,7 +43,16 @@ To start the development server without opening an emulator, run `npm start` and
 
 ## Build an APK
 
-After signing in to Expo/EAS, run:
+Public releases must be signed with the same private release key. Create `android/keystore.properties` locally (it is ignored by Git) with `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`, then run:
+
+```sh
+cd android
+./gradlew assembleRelease
+```
+
+The build intentionally refuses to create a release when production signing is missing. Back up the keystore securely: losing it makes it impossible to update existing installations.
+
+For an Expo/EAS build, sign in and run:
 
 ```sh
 npx eas-cli build --platform android --profile preview

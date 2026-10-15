@@ -24,3 +24,4 @@ qa-*.xml
 *.keystore
 *.p12
 *.pem
+android/keystore.properties
