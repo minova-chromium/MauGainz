@@ -1017,7 +1017,8 @@ function BottomNav({ active, locale, tablet, onChange, onToggleLocale }: { activ
 export default function App() {
   const { width, height } = useWindowDimensions();
   const tablet = Math.min(width, height) >= 600;
-  const landscape = tablet && width > height;
+  const screenLandscape = width > height;
+  const landscape = tablet && screenLandscape;
   const wideLandscape = landscape && width >= 1500;
   const [recipes, setRecipes] = useState<Recipe[]>(starterRecipes);
   const [customCategories, setCustomCategories] = useState<CategoryOption[]>([]);
@@ -1145,7 +1146,7 @@ export default function App() {
         <View style={styles.mainContent}>
           {activeTab === 'home' && <HomeScreen recipes={recipes} locale={locale} tablet={tablet} goals={{ ...goals, ...(dailyTargets.find((item) => item.weekday === new Date().getDay()) ?? {}) }} onOpen={setSelectedRecipe} onGoRecipes={() => setActiveTab('recipes')} onCreate={openCreate} onSettings={() => setSettingsVisible(true)} />}
           {activeTab === 'recipes' && <RecipesScreen recipes={recipes} locale={locale} tablet={tablet} categoryOptions={categoryOptions} onOpen={setSelectedRecipe} onFavorite={toggleFavorite} onCreate={openCreate} />}
-          {activeTab === 'create' && <BuilderScreen key={editingRecipe?.id ?? `new-${recipes.length}`} locale={locale} tablet={tablet} landscape={landscape} wideLandscape={wideLandscape} initialRecipe={editingRecipe} categoryOptions={categoryOptions} categoryStyles={categoryStyles} recentIngredientNames={recentIngredientNames} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} onIngredientUsed={(name) => setRecentIngredientNames((current) => [name, ...current.filter((item) => item !== name)].slice(0, 12))} onAddCategory={(name) => setCustomCategories((current) => [...current, { name, color: colors.lime, icon: 'nutrition-outline' }])} onSave={saveRecipe} onCancel={() => { setEditingRecipe(null); setActiveTab('home'); }} />}
+          {activeTab === 'create' && <BuilderScreen key={editingRecipe?.id ?? `new-${recipes.length}`} locale={locale} tablet={tablet} landscape={screenLandscape} wideLandscape={wideLandscape} initialRecipe={editingRecipe} categoryOptions={categoryOptions} categoryStyles={categoryStyles} recentIngredientNames={recentIngredientNames} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} onIngredientUsed={(name) => setRecentIngredientNames((current) => [name, ...current.filter((item) => item !== name)].slice(0, 12))} onAddCategory={(name) => setCustomCategories((current) => [...current, { name, color: colors.lime, icon: 'nutrition-outline' }])} onSave={saveRecipe} onCancel={() => { setEditingRecipe(null); setActiveTab('home'); }} />}
           {activeTab === 'planner' && <PlannerScreen recipes={recipes} locale={locale} landscape={landscape} plans={plans} shopping={shopping} trainingDays={trainingDays} onTrainingDays={setTrainingDays} onAddPlan={(entry) => setPlans((current) => [...current, entry])} onRemovePlan={(id) => setPlans((current) => current.filter((entry) => entry.id !== id))} onOpenRecipe={setSelectedRecipe} onGenerateShopping={generateShopping} onToggleShopping={(id) => setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item))} onRemoveShopping={(id) => setShopping((current) => current.filter((item) => item.id !== id))} />}
           {activeTab === 'macros' && <PerformanceHub locale={locale} tablet={tablet} goals={goals} recipes={recipes} plans={plans} dailyTargets={dailyTargets} onDailyTargets={setDailyTargets} weights={weights} onWeights={setWeights} vitamins={vitamins} onVitamins={setVitamins} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} trainingDays={trainingDays} />}
           {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
@@ -1173,8 +1174,8 @@ const styles = StyleSheet.create({
   builderDockButton: { height: 58, borderRadius: 18, backgroundColor: colors.lime, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#000', shadowOpacity: .45, shadowRadius: 14, elevation: 14 },
   builderDockText: { color: colors.black, fontSize: 11, fontWeight: '900', letterSpacing: .7 },
   builderLandscapeGrid: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', columnGap: 20, rowGap: 20 },
-  builderLandscapePanel: { width: '49%', minWidth: 0, backgroundColor: '#11120F', borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, padding: 20 },
-  builderLandscapePanelWide: { width: '24%', padding: 16 },
+  builderLandscapePanel: { flexBasis: '47%', flexGrow: 1, maxWidth: '49%', minWidth: 0, backgroundColor: '#11120F', borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, padding: 20 },
+  builderLandscapePanelWide: { flexBasis: '22%', maxWidth: '24%', padding: 16 },
   builderTabletSummary: { flexGrow: 1, minHeight: 210, marginTop: 20, flexDirection: 'row', alignItems: 'stretch', gap: 16 },
   builderSummaryBlock: { flex: 1, minWidth: 0, borderRadius: radius.lg, backgroundColor: '#11120F', borderWidth: 1, borderColor: colors.line, padding: 20, justifyContent: 'space-between' },
   builderReadinessBlock: { flex: 1.25 },
