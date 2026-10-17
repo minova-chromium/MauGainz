@@ -1,5 +1,5 @@
 import { ingredientSuggestions } from './data';
-import { Ingredient, Macros } from './types';
+import { Ingredient, Macros, SavedIngredient } from './types';
 
 type Nutrition = Macros;
 
@@ -33,6 +33,16 @@ const nutritionByName: Record<string, Nutrition> = {
   ginger: n(80, 1.8, 18, 0.8, 2), 'smoked paprika': n(282, 14, 54, 13, 35), 'curry powder': n(325, 14, 56, 14, 53),
   'hot sauce': n(12, 1, 2, 0.4, 1)
 };
+
+export type BaseIngredientProfile = SavedIngredient & { group: string };
+export const baseIngredientProfiles: BaseIngredientProfile[] = ingredientSuggestions.map((item) => ({
+  id: `base-${normalize(item.en).replace(/\s+/g, '-')}`,
+  name: item.en,
+  nameNl: item.nl,
+  baseUnit: 'g',
+  group: item.group,
+  nutritionPer100: nutritionByName[normalize(item.en)] ?? n(0, 0, 0, 0, 0)
+}));
 
 const pieceWeights: Record<string, number> = { eggs: 50, banana: 118, apple: 180, avocado: 150, tortilla: 65, bread: 38, garlic: 3 };
 

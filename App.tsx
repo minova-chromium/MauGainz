@@ -26,10 +26,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { categories, categoryLabel, ingredientSuggestions, starterRecipes, units } from './src/data';
 import { CategoryOption, DailyMacroTarget, ImportedRecipe, Ingredient, IngredientOption, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TabName, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './src/types';
 import { colors, radius } from './src/theme';
-import { estimateRecipeMacros, nutritionCoverage } from './src/nutrition';
+import { baseIngredientProfiles, estimateRecipeMacros, nutritionCoverage } from './src/nutrition';
 import { CookingMode, PlannerScreen, SettingsModal } from './src/ProFeatures';
-import { IngredientLookupModal, RecipeImportModal } from './src/SmartModals';
-import { enrichIngredients } from './src/smartFeatures';
+import { IngredientLookupModal, IngredientMacroReviewModal, RecipeImportModal } from './src/SmartModals';
 import { BackupPayload, cloudConfigured, createSyncCode, downloadCloudBackup, uploadCloudBackup } from './src/cloudSync';
 import { APP_VERSION, AppUpdate, checkForAppUpdate } from './src/updater';
 import { IngredientLibraryModal, PerformanceHub } from './src/AllAround';
@@ -390,6 +389,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
   const [lookupVisible, setLookupVisible] = useState(false);
   const [libraryVisible, setLibraryVisible] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+  const [macroIngredient, setMacroIngredient] = useState<Ingredient | null>(null);
   const [nutritionLoading, setNutritionLoading] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<'basics' | 'ingredients' | 'preparation' | 'macros', boolean>>({ basics: false, ingredients: false, preparation: false, macros: false });
   const amountAnchors = useRef<Record<string, { amount: number; servings: number }>>(Object.fromEntries((initialRecipe?.ingredients ?? []).map((item) => [item.id, { amount: numberValue(item.amount), servings: Math.max(1, initialRecipe?.servings ?? 1) }])));
@@ -452,11 +452,36 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
     onIngredientUsed(option.en);
   };
 
-  const addIngredient = (item: Ingredient) => setIngredients((current) => {
-    const blankIndex = current.findIndex((entry) => !entry.name.trim());
-    if (blankIndex < 0) return [...current, item];
-    return current.map((entry, index) => index === blankIndex ? { ...item, id: entry.id } : entry);
-  });
+  const addIngredient = (item: Ingredient) => {
+    const blank = ingredients.find((entry) => !entry.name.trim());
+    const nextItem = { ...item, id: blank?.id ?? item.id };
+    const needsConfirmation = item.nutritionSource !== 'maugainz' && !!item.nutritionPer100;
+    const recipeItem = needsConfirmation ? { ...nextItem, nutritionPer100: undefined, nutritionSource: undefined } : nextItem;
+    setIngredients((current) => blank ? current.map((entry) => entry.id === blank.id ? recipeItem : entry) : [...current, recipeItem]);
+    if (needsConfirmation) setMacroIngredient(nextItem);
+  };
+
+  const reviewMacros = (ingredient: Ingredient) => {
+    const saved = savedIngredients.find((item) => (ingredient.barcode && item.barcode === ingredient.barcode) || normalizeSearch(item.name) === normalizeSearch(ingredient.name) || (ingredient.nameNl && normalizeSearch(item.nameNl ?? item.name) === normalizeSearch(ingredient.nameNl)));
+    const base = baseIngredientProfiles.find((item) => normalizeSearch(item.name) === normalizeSearch(ingredient.name) || (ingredient.nameNl && normalizeSearch(item.nameNl ?? item.name) === normalizeSearch(ingredient.nameNl)));
+    setMacroIngredient(saved ? { ...ingredient, brand: ingredient.brand ?? saved.brand, barcode: ingredient.barcode ?? saved.barcode, nutritionPer100: saved.nutritionPer100, nutritionSource: 'maugainz' } : base ? { ...ingredient, name: base.name, nameNl: base.nameNl, nutritionPer100: base.nutritionPer100 } : ingredient);
+  };
+
+  const confirmIngredientMacros = (verified: Ingredient, baseUnit: 'g' | 'ml') => {
+    setIngredients((current) => current.map((item) => item.id === verified.id ? { ...item, name: verified.name, nameNl: verified.nameNl, brand: verified.brand, barcode: verified.barcode, nutritionPer100: verified.nutritionPer100, nutritionSource: 'maugainz' } : item));
+    const saved: SavedIngredient = {
+      id: `saved-${Date.now()}`,
+      name: verified.name,
+      nameNl: verified.nameNl,
+      brand: verified.brand,
+      barcode: verified.barcode,
+      baseUnit,
+      nutritionPer100: verified.nutritionPer100!
+    };
+    const existing = savedIngredients.find((item) => (saved.barcode && item.barcode === saved.barcode) || normalizeSearch(item.name) === normalizeSearch(saved.name) || (saved.nameNl && normalizeSearch(item.nameNl ?? item.name) === normalizeSearch(saved.nameNl)));
+    onSavedIngredients(existing ? savedIngredients.map((item) => item.id === existing.id ? { ...saved, id: existing.id } : item) : [saved, ...savedIngredients]);
+    setMacroIngredient(null);
+  };
 
   const filteredSuggestions = ingredientSuggestions.filter((option) =>
     normalizeSearch(`${option.en} ${option.nl} ${option.group}`).includes(normalizeSearch(ingredientQuery))
@@ -487,9 +512,8 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
       const saved = savedIngredients.find((item) => (ingredient.barcode && item.barcode === ingredient.barcode) || normalizeSearch(item.name) === normalizeSearch(ingredient.name) || (ingredient.nameNl && normalizeSearch(item.nameNl ?? item.name) === normalizeSearch(ingredient.nameNl)));
       return saved ? { ...ingredient, nutritionPer100: saved.nutritionPer100, nutritionSource: 'maugainz' as const, barcode: ingredient.barcode ?? saved.barcode, brand: ingredient.brand ?? saved.brand } : ingredient;
     });
-    const enriched = await enrichIngredients(locallyMatched);
-    setIngredients(enriched);
-    const calculated = estimateRecipeMacros(enriched, Math.max(1, numberValue(servings)));
+    setIngredients(locallyMatched);
+    const calculated = estimateRecipeMacros(locallyMatched, Math.max(1, numberValue(servings)));
     setMacroInput(Object.fromEntries(Object.entries(calculated).map(([key, value]) => [key, String(value)])) as typeof macroInput);
     setNutritionLoading(false);
   };
@@ -625,7 +649,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
           {icon('barcode-outline', 20, colors.black)}<Text style={styles.smartIngredientText}>{t(locale, 'SCAN BARCODE OR SEARCH NUTRITION DATABASE', 'SCAN BARCODE OF ZOEK VOEDINGSDATABASE')}</Text>
         </Pressable>
         <Pressable onPress={() => setLibraryVisible(true)} style={styles.ingredientLibraryButton}>
-          {icon('nutrition-outline', 20, colors.lime)}<Text style={styles.ingredientLibraryText}>{t(locale, 'MY INGREDIENT MACROS', 'MIJN INGREDIËNTENMACRO’S')} · {savedIngredients.length}</Text>
+          {icon('nutrition-outline', 20, colors.lime)}<Text style={styles.ingredientLibraryText}>{t(locale, 'FULL INGREDIENT LIBRARY', 'VOLLEDIGE INGREDIËNTENBIBLIOTHEEK')} · {baseIngredientProfiles.length} + {savedIngredients.length}</Text>
         </Pressable>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionScroller} contentContainerStyle={styles.suggestionRow}>
           {filteredSuggestions.slice(0, tablet ? 24 : 14).map((item) => (
@@ -636,31 +660,36 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
         </ScrollView>
         {!!recentIngredientNames.length && <Text style={styles.historyHint}>{t(locale, 'Recent and favourite ingredients appear first.', 'Recente en favoriete ingrediënten staan vooraan.')}</Text>}
         {ingredients.map((ingredient, index) => (
-          <View key={ingredient.id} style={styles.ingredientEditRow}>
-            <DragGrip index={index} total={ingredients.length} onMove={moveIngredient} label={t(locale, `Move ingredient ${index + 1}`, `Verplaats ingrediënt ${index + 1}`)} />
-            <View style={styles.ingredientIndex}><Text style={styles.ingredientIndexText}>{index + 1}</Text></View>
-            <TextInput
-              value={ingredientName(ingredient, locale)}
-              onChangeText={(name) => updateIngredient(ingredient.id, locale === 'nl' ? { nameNl: name, name: ingredient.name || name } : { name })}
-              placeholder={t(locale, 'Custom ingredient', 'Eigen ingrediënt')}
-              placeholderTextColor={colors.muted}
-              style={styles.ingredientNameInput}
-            />
-            <TextInput
-              value={ingredient.amount}
-              onChangeText={(amount) => updateIngredient(ingredient.id, { amount })}
-              placeholder="0"
-              placeholderTextColor={colors.muted}
-              keyboardType="decimal-pad"
-              style={styles.ingredientAmountInput}
-            />
-            <Pressable onPress={() => cycleUnit(ingredient)} style={styles.unitButton}><Text style={styles.unitText}>{unitLabel(ingredient.unit, locale)}</Text></Pressable>
-            <Pressable
-              onPress={() => setIngredients((current) => current.filter((item) => item.id !== ingredient.id))}
-              hitSlop={8}
-              style={styles.removeButton}
-            >{icon('close', 17, colors.muted)}</Pressable>
-            {!!ingredient.nutritionPer100 && <View style={styles.databaseBadge}>{icon('checkmark', 10, colors.black)}</View>}
+          <View key={ingredient.id} style={styles.ingredientEditorBlock}>
+            <View style={styles.ingredientEditRow}>
+              <DragGrip index={index} total={ingredients.length} onMove={moveIngredient} label={t(locale, `Move ingredient ${index + 1}`, `Verplaats ingrediënt ${index + 1}`)} />
+              <View style={styles.ingredientIndex}><Text style={styles.ingredientIndexText}>{index + 1}</Text></View>
+              <TextInput
+                value={ingredientName(ingredient, locale)}
+                onChangeText={(name) => {
+                  const changed = normalizeSearch(name) !== normalizeSearch(ingredientName(ingredient, locale));
+                  updateIngredient(ingredient.id, locale === 'nl'
+                    ? { nameNl: name, name: ingredient.name || name, ...(changed ? { nutritionPer100: undefined, nutritionSource: undefined, barcode: undefined, brand: undefined } : {}) }
+                    : { name, ...(changed ? { nutritionPer100: undefined, nutritionSource: undefined, barcode: undefined, brand: undefined } : {}) });
+                }}
+                onSubmitEditing={() => ingredient.name.trim() && reviewMacros(ingredient)}
+                placeholder={t(locale, 'Custom ingredient', 'Eigen ingrediënt')}
+                placeholderTextColor={colors.muted}
+                style={styles.ingredientNameInput}
+              />
+              <TextInput
+                value={ingredient.amount}
+                onChangeText={(amount) => updateIngredient(ingredient.id, { amount })}
+                placeholder="0"
+                placeholderTextColor={colors.muted}
+                keyboardType="decimal-pad"
+                style={styles.ingredientAmountInput}
+              />
+              <Pressable onPress={() => cycleUnit(ingredient)} style={styles.unitButton}><Text style={styles.unitText}>{unitLabel(ingredient.unit, locale)}</Text></Pressable>
+              <Pressable onPress={() => setIngredients((current) => current.filter((item) => item.id !== ingredient.id))} hitSlop={8} style={styles.removeButton}>{icon('close', 17, colors.muted)}</Pressable>
+              {!!ingredient.nutritionPer100 && <View style={styles.databaseBadge}>{icon('checkmark', 10, colors.black)}</View>}
+            </View>
+            {!!ingredient.name.trim() && <Pressable onPress={() => reviewMacros(ingredient)} style={[styles.macroVerifyBar, !!ingredient.nutritionPer100 && styles.macroVerifyBarConfirmed]}>{icon(ingredient.nutritionPer100 ? 'shield-checkmark' : 'search-circle-outline', 17, ingredient.nutritionPer100 ? colors.black : colors.lime)}<Text style={[styles.macroVerifyText, !!ingredient.nutritionPer100 && styles.macroVerifyTextConfirmed]}>{ingredient.nutritionPer100 ? `${t(locale, 'CONFIRMED', 'BEVESTIGD')} · ${ingredient.nutritionPer100.calories} kcal · P ${ingredient.nutritionPer100.protein} · C ${ingredient.nutritionPer100.carbs} · F ${ingredient.nutritionPer100.fat}` : t(locale, 'FIND OR ENTER MACROS', 'MACRO’S ZOEKEN OF INVULLEN')}</Text>{icon('chevron-forward', 16, ingredient.nutritionPer100 ? colors.black : colors.lime)}</Pressable>}
           </View>
         ))}
         <Pressable onPress={() => setIngredients((current) => [...current, newIngredient()])} style={styles.addLineButton}>
@@ -778,6 +807,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
       </ScrollView>
       {!landscape && <View style={[styles.builderSaveDock, tablet && styles.builderSaveDockTablet]} pointerEvents="box-none"><Pressable onPress={submit} style={({ pressed }) => [styles.builderDockButton, pressed && styles.pressed]}><Text style={styles.builderDockText}>{initialRecipe ? t(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : t(locale, 'SAVE RECIPE', 'RECEPT OPSLAAN')}</Text>{icon('checkmark', 20, colors.black)}</Pressable></View>}
       <IngredientLookupModal visible={lookupVisible} locale={locale} onClose={() => setLookupVisible(false)} onSelect={addIngredient} />
+      <IngredientMacroReviewModal visible={!!macroIngredient} locale={locale} ingredient={macroIngredient} onClose={() => setMacroIngredient(null)} onConfirm={confirmIngredientMacros} />
       <IngredientLibraryModal visible={libraryVisible} locale={locale} ingredients={savedIngredients} onChange={onSavedIngredients} onSelect={addIngredient} onClose={() => setLibraryVisible(false)} />
       <RecipeImportModal visible={importVisible} locale={locale} onClose={() => setImportVisible(false)} onImport={applyImport} />
     </KeyboardAvoidingView>
@@ -1486,5 +1516,10 @@ const styles = StyleSheet.create({
   updatePrimary: { width: '100%', height: 54, borderRadius: 16, backgroundColor: colors.lime, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 20 },
   updatePrimaryText: { color: colors.black, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   updateLater: { minHeight: 44, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center', marginTop: 5 },
-  updateLaterText: { color: colors.muted, fontSize: 11, fontWeight: '800' }
+  updateLaterText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  ingredientEditorBlock: { marginBottom: 5 },
+  macroVerifyBar: { minHeight: 38, marginTop: -4, marginHorizontal: 7, paddingHorizontal: 11, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: '#D2A74A55', backgroundColor: '#D2A74A0B', flexDirection: 'row', alignItems: 'center', gap: 7 },
+  macroVerifyBarConfirmed: { backgroundColor: colors.lime, borderColor: colors.lime },
+  macroVerifyText: { flex: 1, color: colors.lime, fontSize: 8, fontWeight: '900', letterSpacing: .3 },
+  macroVerifyTextConfirmed: { color: colors.black }
 });
