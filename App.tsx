@@ -8,7 +8,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Share,
   StatusBar,
@@ -18,6 +17,7 @@ import {
   View,
   useWindowDimensions
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -1013,7 +1013,7 @@ function RecipeDetail({ recipe, visible, locale, tablet, unitSystem, onClose, on
   );
 }
 
-function BottomNav({ active, locale, tablet, onChange, onToggleLocale }: { active: TabName; locale: Locale; tablet: boolean; onChange: (tab: TabName) => void; onToggleLocale: () => void }) {
+function BottomNav({ active, locale, tablet, compact = false, onChange, onToggleLocale }: { active: TabName; locale: Locale; tablet: boolean; compact?: boolean; onChange: (tab: TabName) => void; onToggleLocale: () => void }) {
   const tabs: { name: TabName; label: string; icon: string; activeIcon: string }[] = [
     { name: 'home', label: t(locale, 'Home', 'Home'), icon: 'home-outline', activeIcon: 'home' },
     { name: 'recipes', label: t(locale, 'Recipes', 'Recepten'), icon: 'book-outline', activeIcon: 'book' },
@@ -1022,14 +1022,14 @@ function BottomNav({ active, locale, tablet, onChange, onToggleLocale }: { activ
     { name: 'macros', label: t(locale, 'Macros', 'Macro’s'), icon: 'analytics-outline', activeIcon: 'analytics' }
   ];
   return (
-    <View style={tablet ? styles.tabletNavRail : styles.bottomNav}>
+    <View style={[tablet ? styles.tabletNavRail : styles.bottomNav, compact && styles.compactBottomNav]}>
       {tablet && <View style={styles.tabletNavBrand}><Image source={brandLogo} resizeMode="contain" style={styles.tabletNavBrandImage} /></View>}
       {tabs.map((tab) => {
         const isActive = active === tab.name;
         const isCreate = tab.name === 'create';
         return (
           <Pressable key={tab.name} onPress={() => onChange(tab.name)} style={[styles.navItem, tablet && styles.tabletNavItem, tablet && isActive && styles.tabletNavItemActive]}>
-            <View style={[styles.navIconWrap, isCreate && styles.createNavButton, isCreate && isActive && styles.createNavButtonActive]}>
+            <View style={[styles.navIconWrap, isCreate && styles.createNavButton, compact && isCreate && styles.compactCreateNavButton, isCreate && isActive && styles.createNavButtonActive]}>
               {icon(isActive ? tab.activeIcon : tab.icon, isCreate ? 27 : 22, isCreate ? colors.black : isActive ? colors.lime : colors.muted)}
             </View>
             {(!isCreate || tablet) && <Text style={[styles.navLabel, tablet && styles.tabletNavLabel, isActive && styles.navLabelActive]}>{tab.label}</Text>}
@@ -1044,10 +1044,11 @@ function BottomNav({ active, locale, tablet, onChange, onToggleLocale }: { activ
   );
 }
 
-export default function App() {
+function MauGainzApp() {
   const { width, height } = useWindowDimensions();
   const tablet = Math.min(width, height) >= 600;
   const screenLandscape = width > height;
+  const compactLandscape = screenLandscape && !tablet;
   const landscape = tablet && screenLandscape;
   const wideLandscape = landscape && width >= 1500;
   const [recipes, setRecipes] = useState<Recipe[]>(starterRecipes);
@@ -1179,7 +1180,7 @@ export default function App() {
           {activeTab === 'create' && <BuilderScreen key={editingRecipe?.id ?? `new-${recipes.length}`} locale={locale} tablet={tablet} landscape={screenLandscape} wideLandscape={wideLandscape} initialRecipe={editingRecipe} categoryOptions={categoryOptions} categoryStyles={categoryStyles} recentIngredientNames={recentIngredientNames} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} onIngredientUsed={(name) => setRecentIngredientNames((current) => [name, ...current.filter((item) => item !== name)].slice(0, 12))} onAddCategory={(name) => setCustomCategories((current) => [...current, { name, color: colors.lime, icon: 'nutrition-outline' }])} onSave={saveRecipe} onCancel={() => { setEditingRecipe(null); setActiveTab('home'); }} />}
           {activeTab === 'planner' && <PlannerScreen recipes={recipes} locale={locale} landscape={landscape} plans={plans} shopping={shopping} trainingDays={trainingDays} onTrainingDays={setTrainingDays} onAddPlan={(entry) => setPlans((current) => [...current, entry])} onRemovePlan={(id) => setPlans((current) => current.filter((entry) => entry.id !== id))} onOpenRecipe={setSelectedRecipe} onGenerateShopping={generateShopping} onToggleShopping={(id) => setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item))} onRemoveShopping={(id) => setShopping((current) => current.filter((item) => item.id !== id))} />}
           {activeTab === 'macros' && <PerformanceHub locale={locale} tablet={tablet} goals={goals} recipes={recipes} plans={plans} dailyTargets={dailyTargets} onDailyTargets={setDailyTargets} weights={weights} onWeights={setWeights} vitamins={vitamins} onVitamins={setVitamins} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} trainingDays={trainingDays} />}
-          {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
+          {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} compact={compactLandscape} onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
         </View>
       </View>
       <RecipeDetail recipe={selectedLive} visible={!!selectedLive} locale={locale} tablet={tablet} unitSystem={unitSystem} onClose={() => setSelectedRecipe(null)} onFavorite={toggleFavorite} onDelete={deleteRecipe} onEdit={editRecipe} onDuplicate={duplicateRecipe} onShare={shareRecipe} onCook={(recipe) => { setSelectedRecipe(null); setCookingRecipe(recipe); }} onAddShopping={(recipe) => { addRecipeToShopping(recipe); Alert.alert('MauGainZ', t(locale, 'Added to your shopping list.', 'Toegevoegd aan je boodschappenlijst.')); }} />
@@ -1188,6 +1189,10 @@ export default function App() {
       <UpdateModal update={availableUpdate} locale={locale} onClose={() => setAvailableUpdate(null)} />
     </SafeAreaView>
   );
+}
+
+export default function App() {
+  return <SafeAreaProvider><MauGainzApp /></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
@@ -1491,6 +1496,7 @@ const styles = StyleSheet.create({
   detailDoneTitle: { color: colors.cream, fontSize: 14, fontWeight: '900' },
   detailDoneText: { color: colors.muted, fontSize: 11, marginTop: 3 },
   bottomNav: { position: 'absolute', left: 14, right: 14, bottom: Platform.OS === 'android' ? 14 : 8, height: 72, backgroundColor: '#151513F4', borderRadius: 23, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 8 },
+  compactBottomNav: { left: 10, right: 10, bottom: 6, height: 54, borderRadius: 18 },
   tabletNavRail: { width: 98, height: '100%', backgroundColor: colors.panel, borderRightWidth: 1, borderRightColor: colors.line, alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: 10, paddingTop: 104, paddingBottom: 12, gap: 8 },
   tabletNavBrand: { position: 'absolute', top: 20, width: 68, height: 68, borderRadius: 20, backgroundColor: colors.black, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   tabletNavBrandImage: { width: 64, height: 64 },
@@ -1502,6 +1508,7 @@ const styles = StyleSheet.create({
   tabletNavLabel: { fontSize: 9, marginTop: 3 },
   navLabelActive: { color: colors.lime },
   createNavButton: { width: 49, height: 49, borderRadius: 17, backgroundColor: colors.lime, transform: [{ rotate: '0deg' }] },
+  compactCreateNavButton: { width: 40, height: 40, borderRadius: 13 },
   createNavButtonActive: { backgroundColor: colors.cream },
   languageNavButton: { width: 34, height: 30, alignItems: 'center', justifyContent: 'center' },
   languageNavLabel: { color: colors.blue, fontSize: 8, fontWeight: '900', marginTop: 1 },

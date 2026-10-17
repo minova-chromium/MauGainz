@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { DailyMacroTarget, Ingredient, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, TrainingDay, UserGoals, VitaminEntry, WeightEntry } from './types';
 import { colors, radius } from './theme';

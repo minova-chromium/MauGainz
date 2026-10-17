@@ -1,7 +1,10 @@
 import { ImportedRecipe, Ingredient, Macros } from './types';
 
 const OFF_BASE = 'https://world.openfoodfacts.org';
-const headers = { 'User-Agent': 'MauGainZ/2.3 (Android; https://github.com/minova-chromium/MauGainz)' };
+const headers = { 'User-Agent': 'MauGainZ/2.3.1 (Android; https://github.com/minova-chromium/MauGainz)' };
+const productCache = new Map<string, Ingredient>();
+const searchCache = new Map<string, { storedAt: number; items: Ingredient[] }>();
+const SEARCH_CACHE_MS = 30 * 60 * 1000;
 const number = (value: unknown) => Number(String(value ?? '').replace(',', '.')) || 0;
 const decodeHtml = (value: string) => value
   .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
@@ -17,14 +20,16 @@ type OffProduct = {
   product_name?: string;
   product_name_en?: string;
   product_name_nl?: string;
+  product_name_fr?: string;
   brands?: string;
   image_front_small_url?: string;
   serving_quantity?: number;
   nutriments?: Record<string, number | string>;
 };
 
-const productToIngredient = (product: OffProduct): Ingredient | null => {
-  const name = clean(product.product_name_en || product.product_name || product.product_name_nl);
+const productToIngredient = (product: OffProduct, locale: 'en' | 'nl' = 'nl'): Ingredient | null => {
+  const localizedName = locale === 'nl' ? product.product_name_nl : product.product_name_en;
+  const name = clean(localizedName || product.product_name || product.product_name_nl || product.product_name_fr || product.product_name_en);
   if (!name) return null;
   const nutrients = product.nutriments ?? {};
   const nutritionPer100: Macros = {
@@ -49,22 +54,31 @@ const productToIngredient = (product: OffProduct): Ingredient | null => {
 };
 
 export async function lookupBarcode(barcode: string, locale: 'en' | 'nl' = 'nl'): Promise<Ingredient> {
-  const fields = 'code,product_name,product_name_en,product_name_nl,brands,image_front_small_url,serving_quantity,nutriments';
+  const cacheKey = `${barcode.trim()}-${locale}`;
+  const cached = productCache.get(cacheKey);
+  if (cached) return { ...cached, id: `ingredient-${Date.now()}-${Math.random()}` };
+  const fields = 'code,product_name,product_name_en,product_name_nl,product_name_fr,brands,image_front_small_url,serving_quantity,nutriments';
   const response = await fetch(`${OFF_BASE}/api/v3/product/${encodeURIComponent(barcode)}?cc=be&lc=${locale}&fields=${fields}`, { headers });
   if (!response.ok) throw new Error('network');
   const data = await response.json() as { status?: number | string; product?: OffProduct };
-  const ingredient = data.product ? productToIngredient(data.product) : null;
+  const ingredient = data.product ? productToIngredient(data.product, locale) : null;
   if (!ingredient) throw new Error('not-found');
+  productCache.set(cacheKey, ingredient);
   return ingredient;
 }
 
 export async function searchNutrition(query: string, locale: 'en' | 'nl' = 'nl'): Promise<Ingredient[]> {
-  const fields = 'code,product_name,product_name_en,product_name_nl,brands,image_front_small_url,serving_quantity,nutriments';
+  const cacheKey = `${locale}-${query.toLowerCase().trim()}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.storedAt < SEARCH_CACHE_MS) return cached.items.map((item) => ({ ...item, id: `ingredient-${Date.now()}-${Math.random()}` }));
+  const fields = 'code,product_name,product_name_en,product_name_nl,product_name_fr,brands,image_front_small_url,serving_quantity,nutriments';
   const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=12&cc=be&lc=${locale}&tagtype_0=countries&tag_contains_0=contains&tag_0=belgium&fields=${fields}`;
   const response = await fetch(url, { headers });
   if (!response.ok) throw new Error('network');
   const data = await response.json() as { products?: OffProduct[] };
-  return (data.products ?? []).map(productToIngredient).filter((item): item is Ingredient => !!item && item.nutritionPer100!.calories > 0);
+  const items = (data.products ?? []).map((product) => productToIngredient(product, locale)).filter((item): item is Ingredient => !!item && item.nutritionPer100!.calories > 0);
+  searchCache.set(cacheKey, { storedAt: Date.now(), items });
+  return items;
 }
 
 export async function enrichIngredients(ingredients: Ingredient[]): Promise<Ingredient[]> {
