@@ -43,7 +43,7 @@ const PREFERENCES_KEY = '@maugains/preferences-v1';
 const INGREDIENT_HISTORY_KEY = '@maugains/ingredient-history-v1';
 const CLOUD_SYNC_KEY = '@maugains/cloud-sync-v1';
 const ALL_AROUND_KEY = '@maugainz/all-around-v1';
-const brandLogo = require('./assets/branding/maugainz-v2-transparent.png');
+const brandLogo = require('./assets/branding/maugainz-v3-mark.png');
 
 const t = (locale: Locale, english: string, dutch: string) => locale === 'nl' ? dutch : english;
 const recipeTitle = (recipe: Recipe, locale: Locale) => locale === 'nl' ? recipe.titleNl ?? recipe.title : recipe.title;

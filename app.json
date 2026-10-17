@@ -4,9 +4,9 @@
     "slug": "maugains",
     "version": "2.3.1",
     "orientation": "default",
-    "icon": "./assets/branding/maugainz-v2-black.png",
+    "icon": "./assets/branding/maugainz-v3-mark.png",
     "splash": {
-      "image": "./assets/branding/maugainz-v2-transparent.png",
+      "image": "./assets/branding/maugainz-v3-lockup.png",
       "resizeMode": "contain",
       "backgroundColor": "#0B0C09"
     },
@@ -19,7 +19,7 @@
       "package": "com.maugains.cookbook",
       "versionCode": 13,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/branding/maugainz-v2-transparent.png",
+        "foregroundImage": "./assets/branding/maugainz-v3-mark.png",
         "backgroundColor": "#0B0C09"
       },
       "predictiveBackGestureEnabled": true

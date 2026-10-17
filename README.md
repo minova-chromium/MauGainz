@@ -6,6 +6,8 @@ An Android-first performance cookbook for building recipes, tracking exact ingre
 
 Download the newest universal Android APK from [GitHub Releases](https://github.com/minova-chromium/MauGainz/releases/latest). Android may ask you to allow APK installation from your browser the first time.
 
+The official product site is published through GitHub Pages at [minova-chromium.github.io/MauGainz](https://minova-chromium.github.io/MauGainz/). Its download button reads GitHub's latest-release API, so a newly published APK appears on the website automatically without requiring a separate website edit.
+
 MauGainZ checks the latest official GitHub release when the app starts. When a newer semantic version is available, an in-app English/Dutch update screen links directly to the universal APK. Android always keeps the final installation confirmation under the user's control.
 
 ## Smart features

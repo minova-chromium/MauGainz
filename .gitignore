@@ -4,6 +4,8 @@ node_modules/
 dist/
 dist-check/
 dist-check-*/
+!website/dist/
+!website/dist/**
 .build-tools/
 web-build/
 *.log
@@ -15,6 +17,7 @@ android/app/build/
 *.apk
 qa-*.png
 qa-*.xml
+.qa/
 
 # Local credentials and environment configuration
 .env
