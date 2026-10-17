@@ -1,7 +1,7 @@
 import { ImportedRecipe, Ingredient, Macros } from './types';
 
 const OFF_BASE = 'https://world.openfoodfacts.org';
-const headers = { 'User-Agent': 'MauGainZ/2.1 (Android cookbook; contact: local-app)' };
+const headers = { 'User-Agent': 'MauGainZ/2.3 (Android; https://github.com/minova-chromium/MauGainz)' };
 const number = (value: unknown) => Number(String(value ?? '').replace(',', '.')) || 0;
 const decodeHtml = (value: string) => value
   .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
@@ -28,7 +28,7 @@ const productToIngredient = (product: OffProduct): Ingredient | null => {
   if (!name) return null;
   const nutrients = product.nutriments ?? {};
   const nutritionPer100: Macros = {
-    calories: number(nutrients['energy-kcal_100g']),
+    calories: number(nutrients['energy-kcal_100g']) || Math.round(number(nutrients.energy_100g) / 4.184),
     protein: number(nutrients.proteins_100g),
     carbs: number(nutrients.carbohydrates_100g),
     fat: number(nutrients.fat_100g),
@@ -48,19 +48,19 @@ const productToIngredient = (product: OffProduct): Ingredient | null => {
   };
 };
 
-export async function lookupBarcode(barcode: string): Promise<Ingredient> {
+export async function lookupBarcode(barcode: string, locale: 'en' | 'nl' = 'nl'): Promise<Ingredient> {
   const fields = 'code,product_name,product_name_en,product_name_nl,brands,image_front_small_url,serving_quantity,nutriments';
-  const response = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}?fields=${fields}`, { headers });
+  const response = await fetch(`${OFF_BASE}/api/v3/product/${encodeURIComponent(barcode)}?cc=be&lc=${locale}&fields=${fields}`, { headers });
   if (!response.ok) throw new Error('network');
-  const data = await response.json() as { status?: number; product?: OffProduct };
-  const ingredient = data.status === 1 && data.product ? productToIngredient(data.product) : null;
+  const data = await response.json() as { status?: number | string; product?: OffProduct };
+  const ingredient = data.product ? productToIngredient(data.product) : null;
   if (!ingredient) throw new Error('not-found');
   return ingredient;
 }
 
-export async function searchNutrition(query: string): Promise<Ingredient[]> {
+export async function searchNutrition(query: string, locale: 'en' | 'nl' = 'nl'): Promise<Ingredient[]> {
   const fields = 'code,product_name,product_name_en,product_name_nl,brands,image_front_small_url,serving_quantity,nutriments';
-  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=${fields}`;
+  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=12&cc=be&lc=${locale}&tagtype_0=countries&tag_contains_0=contains&tag_0=belgium&fields=${fields}`;
   const response = await fetch(url, { headers });
   if (!response.ok) throw new Error('network');
   const data = await response.json() as { products?: OffProduct[] };

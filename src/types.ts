@@ -81,6 +81,39 @@ export type MealPlanEntry = {
   date: string;
   meal: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
   recipeId: string;
+  tag?: string;
+};
+
+export type DailyMacroTarget = Macros & {
+  weekday: number;
+};
+
+export type WeightEntry = {
+  id: string;
+  date: string;
+  weightKg: number;
+};
+
+export type VitaminEntry = {
+  id: string;
+  name: string;
+  dose: string;
+  takenDates: string[];
+};
+
+export type TrainingDay = {
+  weekday: number;
+  label: string;
+};
+
+export type SavedIngredient = {
+  id: string;
+  name: string;
+  nameNl?: string;
+  brand?: string;
+  barcode?: string;
+  baseUnit: 'g' | 'ml';
+  nutritionPer100: Macros;
 };
 
 export type UnitSystem = 'metric' | 'imperial';

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
-import { CategoryOption, MealPlanEntry, Recipe, ShoppingItem, UnitSystem, UserGoals } from './types';
+import { CategoryOption, DailyMacroTarget, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './types';
 
 export type BackupPayload = {
   version: number;
@@ -10,6 +10,11 @@ export type BackupPayload = {
   plans: MealPlanEntry[];
   shopping: ShoppingItem[];
   unitSystem: UnitSystem;
+  dailyTargets?: DailyMacroTarget[];
+  weights?: WeightEntry[];
+  vitamins?: VitaminEntry[];
+  savedIngredients?: SavedIngredient[];
+  trainingDays?: TrainingDay[];
 };
 
 const API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '';
