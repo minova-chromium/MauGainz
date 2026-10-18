@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -24,7 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { categories, categoryLabel, ingredientSuggestions, starterRecipes, units } from './src/data';
-import { CategoryOption, DailyMacroTarget, ImportedRecipe, Ingredient, IngredientOption, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TabName, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './src/types';
+import { CategoryOption, DailyMacroTarget, FoodDiaryEntry, ImportedRecipe, Ingredient, IngredientOption, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TabName, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './src/types';
 import { colors, radius } from './src/theme';
 import { baseIngredientProfiles, estimateRecipeMacros, nutritionCoverage } from './src/nutrition';
 import { CookingMode, PlannerScreen, SettingsModal } from './src/ProFeatures';
@@ -32,6 +33,9 @@ import { IngredientLookupModal, IngredientMacroReviewModal, RecipeImportModal } 
 import { BackupPayload, cloudConfigured, createSyncCode, downloadCloudBackup, uploadCloudBackup } from './src/cloudSync';
 import { APP_VERSION, AppUpdate, checkForAppUpdate } from './src/updater';
 import { IngredientLibraryModal, PerformanceHub } from './src/AllAround';
+import { FoodDiaryScreen } from './src/FoodDiary';
+import { FriendsScreen } from './src/Friends';
+import { AccountUser, downloadAccountData, getAccountDataOwner, restoreAccount, uploadAccountData } from './src/accountSync';
 
 const STORAGE_KEY = '@maugains/recipes-v1';
 const LOCALE_KEY = '@maugains/locale-v1';
@@ -43,6 +47,7 @@ const PREFERENCES_KEY = '@maugains/preferences-v1';
 const INGREDIENT_HISTORY_KEY = '@maugains/ingredient-history-v1';
 const CLOUD_SYNC_KEY = '@maugains/cloud-sync-v1';
 const ALL_AROUND_KEY = '@maugainz/all-around-v1';
+const DIARY_KEY = '@maugainz/food-diary-v1';
 const brandLogo = require('./assets/branding/maugainz-v3-mark.png');
 
 const t = (locale: Locale, english: string, dutch: string) => locale === 'nl' ? dutch : english;
@@ -51,6 +56,7 @@ const recipeSubtitle = (recipe: Recipe, locale: Locale) => locale === 'nl' ? rec
 const ingredientName = (ingredient: Ingredient, locale: Locale) => locale === 'nl' ? ingredient.nameNl ?? ingredient.name : ingredient.name;
 const recipeSteps = (recipe: Recipe, locale: Locale) => locale === 'nl' ? recipe.stepsNl ?? recipe.steps : recipe.steps;
 const unitLabel = (unit: string, locale: Locale) => locale === 'nl' ? ({ pc: 'st', tbsp: 'el', tsp: 'tl', scoop: 'schep' } as Record<string, string>)[unit] ?? unit : unit;
+const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const icon = (name: string, size = 20, color = colors.cream) => (
   <Ionicons name={name as never} size={size} color={color} />
@@ -187,24 +193,26 @@ function UpdateModal({ update, locale, onClose }: { update: AppUpdate | null; lo
   );
 }
 
-function HomeScreen({ recipes, locale, tablet, goals, onOpen, onGoRecipes, onCreate, onSettings }: {
+function HomeScreen({ recipes, diaryEntries, locale, tablet, goals, onOpen, onGoRecipes, onGoDiary, onCreate, onSettings }: {
   recipes: Recipe[];
+  diaryEntries: FoodDiaryEntry[];
   locale: Locale;
   tablet: boolean;
   goals: UserGoals;
   onOpen: (recipe: Recipe) => void;
   onGoRecipes: () => void;
+  onGoDiary: () => void;
   onCreate: () => void;
   onSettings: () => void;
 }) {
   const favorites = recipes.filter((recipe) => recipe.favorite);
   const spotlight = favorites[0] ?? recipes[0];
-  const today = recipes.slice(0, 2).reduce(
-    (sum, recipe) => ({
-      calories: sum.calories + recipe.macros.calories,
-      protein: sum.protein + recipe.macros.protein,
-      carbs: sum.carbs + recipe.macros.carbs,
-      fat: sum.fat + recipe.macros.fat
+  const today = diaryEntries.filter((entry) => entry.date === localDateKey()).reduce(
+    (sum, entry) => ({
+      calories: Math.round((sum.calories + entry.macros.calories) * 10) / 10,
+      protein: Math.round((sum.protein + entry.macros.protein) * 10) / 10,
+      carbs: Math.round((sum.carbs + entry.macros.carbs) * 10) / 10,
+      fat: Math.round((sum.fat + entry.macros.fat) * 10) / 10
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
@@ -222,7 +230,7 @@ function HomeScreen({ recipes, locale, tablet, goals, onOpen, onGoRecipes, onCre
           <LinearGradient colors={['#E0B65E', '#B88A35']} style={[styles.heroCard, tablet && styles.tabletHeroCard]}>
             <View style={styles.heroTop}>
               <View style={styles.heroLabel}><Text style={styles.heroLabelText}>{t(locale, "TODAY'S FUEL", 'BRANDSTOF VANDAAG')}</Text></View>
-              {icon('flash', 27, colors.black)}
+              <Pressable onPress={onGoDiary} style={styles.heroDiaryButton}>{icon('journal-outline', 18, colors.black)}<Text style={styles.heroDiaryButtonText}>{t(locale, 'OPEN DIARY', 'OPEN DAGBOEK')}</Text></Pressable>
             </View>
             <Text style={[styles.heroNumber, tablet && styles.tabletHeroNumber]}>{today.calories.toLocaleString()}</Text>
             <Text style={styles.heroUnit}>{t(locale, 'OF', 'VAN')} {goals.calories.toLocaleString()} KCAL</Text>
@@ -391,7 +399,9 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
   const [importVisible, setImportVisible] = useState(false);
   const [macroIngredient, setMacroIngredient] = useState<Ingredient | null>(null);
   const [nutritionLoading, setNutritionLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<'basics' | 'ingredients' | 'preparation' | 'macros', boolean>>({ basics: false, ingredients: false, preparation: false, macros: false });
+  const builderScrollRef = useRef<ScrollView>(null);
   const amountAnchors = useRef<Record<string, { amount: number; servings: number }>>(Object.fromEntries((initialRecipe?.ingredients ?? []).map((item) => [item.id, { amount: numberValue(item.amount), servings: Math.max(1, initialRecipe?.servings ?? 1) }])));
   const toggleSection = (section: keyof typeof collapsed) => setCollapsed((current) => ({ ...current, [section]: !current[section] }));
   const filledIngredientCount = ingredients.filter((item) => item.name.trim() && item.amount.trim()).length;
@@ -403,6 +413,21 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
     { label: t(locale, 'Macros entered', 'Macro’s ingevuld'), done: numberValue(macroInput.calories) > 0 }
   ];
   const completion = Math.round((recipeChecks.filter((item) => item.done).length / recipeChecks.length) * 100);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      setTimeout(() => {
+        const focusedInput = TextInput.State.currentlyFocusedInput?.();
+        if (focusedInput) builderScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(focusedInput, 36, true);
+      }, 120);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const updateIngredient = (id: string, update: Partial<Ingredient>) => {
     if (update.amount !== undefined) {
@@ -569,8 +594,8 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" stickyHeaderIndices={landscape ? [0] : undefined} contentContainerStyle={[styles.builderContent, tablet && styles.tabletBuilderContent]}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView ref={builderScrollRef} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets stickyHeaderIndices={landscape ? [0] : undefined} contentContainerStyle={[styles.builderContent, tablet && styles.tabletBuilderContent, keyboardVisible && styles.builderContentKeyboardOpen]}>
         <View style={landscape ? styles.builderStickyHeader : undefined}>
         <Header
           eyebrow={initialRecipe ? t(locale, 'EDIT PERFORMANCE RECIPE', 'PERFORMANCERECEPT BEWERKEN') : t(locale, 'NEW PERFORMANCE RECIPE', 'NIEUW PERFORMANCERECEPT')}
@@ -801,11 +826,11 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
             </View>
           </View>
         )}
-        <Pressable onPress={submit} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
+        {landscape && <Pressable onPress={submit} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
           <Text style={styles.saveButtonText}>{initialRecipe ? t(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : t(locale, 'SAVE TO COOKBOOK', 'OPSLAAN IN KOOKBOEK')}</Text>{icon('arrow-forward', 21, colors.black)}
-        </Pressable>
+        </Pressable>}
       </ScrollView>
-      {!landscape && <View style={[styles.builderSaveDock, tablet && styles.builderSaveDockTablet]} pointerEvents="box-none"><Pressable onPress={submit} style={({ pressed }) => [styles.builderDockButton, pressed && styles.pressed]}><Text style={styles.builderDockText}>{initialRecipe ? t(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : t(locale, 'SAVE RECIPE', 'RECEPT OPSLAAN')}</Text>{icon('checkmark', 20, colors.black)}</Pressable></View>}
+      {!landscape && !keyboardVisible && <View style={[styles.builderSaveDock, tablet && styles.builderSaveDockTablet]} pointerEvents="box-none"><Pressable onPress={submit} style={({ pressed }) => [styles.builderDockButton, pressed && styles.pressed]}><Text style={styles.builderDockText}>{initialRecipe ? t(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : t(locale, 'SAVE RECIPE', 'RECEPT OPSLAAN')}</Text>{icon('checkmark', 20, colors.black)}</Pressable></View>}
       <IngredientLookupModal visible={lookupVisible} locale={locale} onClose={() => setLookupVisible(false)} onSelect={addIngredient} />
       <IngredientMacroReviewModal visible={!!macroIngredient} locale={locale} ingredient={macroIngredient} onClose={() => setMacroIngredient(null)} onConfirm={confirmIngredientMacros} />
       <IngredientLibraryModal visible={libraryVisible} locale={locale} ingredients={savedIngredients} onChange={onSavedIngredients} onSelect={addIngredient} onClose={() => setLibraryVisible(false)} />
@@ -1017,9 +1042,11 @@ function BottomNav({ active, locale, tablet, compact = false, onChange, onToggle
   const tabs: { name: TabName; label: string; icon: string; activeIcon: string }[] = [
     { name: 'home', label: t(locale, 'Home', 'Home'), icon: 'home-outline', activeIcon: 'home' },
     { name: 'recipes', label: t(locale, 'Recipes', 'Recepten'), icon: 'book-outline', activeIcon: 'book' },
+    { name: 'diary', label: t(locale, 'Diary', 'Dagboek'), icon: 'journal-outline', activeIcon: 'journal' },
     { name: 'create', label: t(locale, 'Create', 'Maken'), icon: 'add', activeIcon: 'add' },
     { name: 'planner', label: t(locale, 'Plan', 'Plan'), icon: 'calendar-outline', activeIcon: 'calendar' },
-    { name: 'macros', label: t(locale, 'Macros', 'Macro’s'), icon: 'analytics-outline', activeIcon: 'analytics' }
+    { name: 'macros', label: t(locale, 'Macros', 'Macro’s'), icon: 'analytics-outline', activeIcon: 'analytics' },
+    { name: 'friends', label: t(locale, 'Friends', 'Vrienden'), icon: 'people-outline', activeIcon: 'people' }
   ];
   return (
     <View style={[tablet ? styles.tabletNavRail : styles.bottomNav, compact && styles.compactBottomNav]}>
@@ -1036,10 +1063,10 @@ function BottomNav({ active, locale, tablet, compact = false, onChange, onToggle
           </Pressable>
         );
       })}
-      <Pressable onPress={onToggleLocale} style={[styles.navItem, tablet && styles.tabletNavItem]} accessibilityLabel={t(locale, 'Switch to Dutch', 'Naar Engels wisselen')}>
+      {tablet && <Pressable onPress={onToggleLocale} style={[styles.navItem, styles.tabletNavItem]} accessibilityLabel={t(locale, 'Switch to Dutch', 'Naar Engels wisselen')}>
         <View style={styles.languageNavButton}>{icon('language-outline', 21, colors.blue)}</View>
         <Text style={styles.languageNavLabel}>{locale === 'en' ? 'NL' : 'EN'}</Text>
-      </Pressable>
+      </Pressable>}
     </View>
   );
 }
@@ -1061,6 +1088,7 @@ function MauGainzApp() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [goals, setGoals] = useState<UserGoals>({ weightKg: 85, goal: 'gain', calories: 3060, protein: 170, carbs: 394, fat: 77 });
   const [plans, setPlans] = useState<MealPlanEntry[]>([]);
+  const [diaryEntries, setDiaryEntries] = useState<FoodDiaryEntry[]>([]);
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [recentIngredientNames, setRecentIngredientNames] = useState<string[]>([]);
@@ -1074,13 +1102,16 @@ function MauGainzApp() {
   const [vitamins, setVitamins] = useState<VitaminEntry[]>([]);
   const [savedIngredients, setSavedIngredients] = useState<SavedIngredient[]>([]);
   const [trainingDays, setTrainingDays] = useState<TrainingDay[]>([]);
+  const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
+  const [accountReady, setAccountReady] = useState(false);
+  const [accountSyncState, setAccountSyncState] = useState<'offline' | 'syncing' | 'synced' | 'error'>('offline');
 
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(LOCALE_KEY), AsyncStorage.getItem(CATEGORY_KEY),
       AsyncStorage.getItem(GOALS_KEY), AsyncStorage.getItem(PLAN_KEY), AsyncStorage.getItem(SHOPPING_KEY),
-      AsyncStorage.getItem(PREFERENCES_KEY), AsyncStorage.getItem(INGREDIENT_HISTORY_KEY), AsyncStorage.getItem(CLOUD_SYNC_KEY), AsyncStorage.getItem(ALL_AROUND_KEY)
-    ]).then(([storedRecipes, storedLocale, storedCategories, storedGoals, storedPlans, storedShopping, storedPreferences, storedHistory, storedCloud, storedAllAround]) => {
+      AsyncStorage.getItem(PREFERENCES_KEY), AsyncStorage.getItem(INGREDIENT_HISTORY_KEY), AsyncStorage.getItem(CLOUD_SYNC_KEY), AsyncStorage.getItem(ALL_AROUND_KEY), AsyncStorage.getItem(DIARY_KEY)
+    ]).then(([storedRecipes, storedLocale, storedCategories, storedGoals, storedPlans, storedShopping, storedPreferences, storedHistory, storedCloud, storedAllAround, storedDiary]) => {
       if (storedRecipes) setRecipes(JSON.parse(storedRecipes) as Recipe[]);
       if (storedLocale === 'en' || storedLocale === 'nl') setLocale(storedLocale);
       if (storedCategories) {
@@ -1094,6 +1125,7 @@ function MauGainzApp() {
       if (storedHistory) setRecentIngredientNames(JSON.parse(storedHistory) as string[]);
       if (storedCloud) { const cloud = JSON.parse(storedCloud) as { syncCode?: string; lastSyncedAt?: number }; if (cloud.syncCode) setSyncCode(cloud.syncCode); setLastSyncedAt(cloud.lastSyncedAt); }
       if (storedAllAround) { const data = JSON.parse(storedAllAround) as { dailyTargets?: DailyMacroTarget[]; weights?: WeightEntry[]; vitamins?: VitaminEntry[]; savedIngredients?: SavedIngredient[]; trainingDays?: TrainingDay[] }; setDailyTargets(data.dailyTargets ?? []); setWeights(data.weights ?? []); setVitamins(data.vitamins ?? []); setSavedIngredients((data.savedIngredients ?? []).map((item) => ({ ...item, baseUnit: item.baseUnit ?? 'g' }))); setTrainingDays(data.trainingDays ?? []); }
+      if (storedDiary) setDiaryEntries(JSON.parse(storedDiary) as FoodDiaryEntry[]);
     }).catch(() => undefined).finally(() => setHydrated(true));
   }, []);
 
@@ -1107,6 +1139,7 @@ function MauGainzApp() {
   useEffect(() => { if (hydrated) AsyncStorage.setItem(INGREDIENT_HISTORY_KEY, JSON.stringify(recentIngredientNames)).catch(() => undefined); }, [recentIngredientNames, hydrated]);
   useEffect(() => { if (hydrated) AsyncStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify({ syncCode, lastSyncedAt })).catch(() => undefined); }, [syncCode, lastSyncedAt, hydrated]);
   useEffect(() => { if (hydrated) AsyncStorage.setItem(ALL_AROUND_KEY, JSON.stringify({ dailyTargets, weights, vitamins, savedIngredients, trainingDays })).catch(() => undefined); }, [dailyTargets, weights, vitamins, savedIngredients, trainingDays, hydrated]);
+  useEffect(() => { if (hydrated) AsyncStorage.setItem(DIARY_KEY, JSON.stringify(diaryEntries)).catch(() => undefined); }, [diaryEntries, hydrated]);
 
   useEffect(() => {
     if (!hydrated || Platform.OS !== 'android') return;
@@ -1144,10 +1177,42 @@ function MauGainzApp() {
     const items = recipeIds.flatMap((id) => recipes.find((recipe) => recipe.id === id)?.ingredients.map((item) => ({ id: `${Date.now()}-${id}-${item.id}-${Math.random()}`, name: ingredientName(item, locale), amount: item.amount, unit: item.unit, checked: false, recipeId: id })) ?? []);
     setShopping(items);
   };
-  const backupPayload = (): BackupPayload => ({ version: 4, recipes, customCategories, goals, plans, shopping, unitSystem, dailyTargets, weights, vitamins, savedIngredients, trainingDays });
+  const backupPayload = (): BackupPayload => ({ version: 6, recipes, customCategories, goals, plans, shopping, unitSystem, dailyTargets, weights, vitamins, savedIngredients, trainingDays, diaryEntries });
+  const freshAccountPayload = (): BackupPayload => ({ version: 6, recipes: starterRecipes, customCategories: [], goals: { weightKg: 85, goal: 'gain', calories: 3060, protein: 170, carbs: 394, fat: 77 }, plans: [], shopping: [], unitSystem: 'metric', dailyTargets: [], weights: [], vitamins: [], savedIngredients: [], trainingDays: [], diaryEntries: [] });
   const applyBackup = (data: BackupPayload) => {
-    setRecipes(data.recipes); setCustomCategories(data.customCategories ?? []); if (data.goals) setGoals(data.goals); setPlans(data.plans ?? []); setShopping(data.shopping ?? []); if (data.unitSystem) setUnitSystem(data.unitSystem); setDailyTargets(data.dailyTargets ?? []); setWeights(data.weights ?? []); setVitamins(data.vitamins ?? []); setSavedIngredients(data.savedIngredients ?? []); setTrainingDays(data.trainingDays ?? []);
+    setRecipes(data.recipes); setCustomCategories(data.customCategories ?? []); if (data.goals) setGoals(data.goals); setPlans(data.plans ?? []); setShopping(data.shopping ?? []); if (data.unitSystem) setUnitSystem(data.unitSystem); setDailyTargets(data.dailyTargets ?? []); setWeights(data.weights ?? []); setVitamins(data.vitamins ?? []); setSavedIngredients(data.savedIngredients ?? []); setTrainingDays(data.trainingDays ?? []); setDiaryEntries(data.diaryEntries ?? []);
   };
+  const connectAccount = async (user: AccountUser) => {
+    setAccountUser(user); setAccountReady(false); setAccountSyncState('syncing');
+    try {
+      const previousOwner = await getAccountDataOwner();
+      const cloud = await downloadAccountData();
+      if (cloud?.payload) { applyBackup(cloud.payload); setLastSyncedAt(cloud.updatedAt); }
+      else {
+        const isNewOwner = Boolean(previousOwner && previousOwner !== user.uid);
+        const initial = isNewOwner ? freshAccountPayload() : backupPayload();
+        if (isNewOwner) applyBackup(initial);
+        const syncedAt = await uploadAccountData(initial); setLastSyncedAt(syncedAt);
+      }
+      setAccountReady(true); setAccountSyncState('synced');
+    } catch { setAccountSyncState('error'); throw new Error('sync'); }
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let active = true;
+    restoreAccount().then((user) => { if (active && user) connectAccount(user).catch(() => undefined); });
+    return () => { active = false; };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !accountUser || !accountReady) return;
+    setAccountSyncState('syncing');
+    const timer = setTimeout(() => {
+      uploadAccountData(backupPayload()).then((syncedAt) => { setLastSyncedAt(syncedAt); setAccountSyncState('synced'); }).catch(() => setAccountSyncState('error'));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [recipes, customCategories, goals, plans, shopping, unitSystem, dailyTargets, weights, vitamins, savedIngredients, trainingDays, diaryEntries, hydrated, accountUser?.uid, accountReady]);
   const exportBackup = () => {
     const data = JSON.stringify(backupPayload(), null, 2);
     setBackupText(data); Share.share({ title: 'MauGainZ backup', message: data }).catch(() => undefined);
@@ -1156,7 +1221,7 @@ function MauGainzApp() {
     try {
       const data = JSON.parse(json) as Partial<BackupPayload>;
       if (!Array.isArray(data.recipes)) throw new Error('invalid');
-      applyBackup({ version: 4, recipes: data.recipes, customCategories: data.customCategories ?? [], goals: data.goals ?? goals, plans: data.plans ?? [], shopping: data.shopping ?? [], unitSystem: data.unitSystem ?? unitSystem, dailyTargets: data.dailyTargets, weights: data.weights, vitamins: data.vitamins, savedIngredients: data.savedIngredients, trainingDays: data.trainingDays });
+      applyBackup({ version: 6, recipes: data.recipes, customCategories: data.customCategories ?? [], goals: data.goals ?? goals, plans: data.plans ?? [], shopping: data.shopping ?? [], unitSystem: data.unitSystem ?? unitSystem, dailyTargets: data.dailyTargets, weights: data.weights, vitamins: data.vitamins, savedIngredients: data.savedIngredients, trainingDays: data.trainingDays, diaryEntries: data.diaryEntries });
       Alert.alert('MauGainZ', t(locale, 'Backup imported successfully.', 'Back-up succesvol geïmporteerd.'));
     } catch { Alert.alert('MauGainZ', t(locale, 'This backup is not valid.', 'Deze back-up is niet geldig.')); }
   };
@@ -1175,17 +1240,19 @@ function MauGainzApp() {
       <View style={[styles.flex, tablet && styles.tabletAppFrame]}>
         {tablet && <BottomNav active={activeTab} locale={locale} tablet onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
         <View style={styles.mainContent}>
-          {activeTab === 'home' && <HomeScreen recipes={recipes} locale={locale} tablet={tablet} goals={{ ...goals, ...(dailyTargets.find((item) => item.weekday === new Date().getDay()) ?? {}) }} onOpen={setSelectedRecipe} onGoRecipes={() => setActiveTab('recipes')} onCreate={openCreate} onSettings={() => setSettingsVisible(true)} />}
+          {activeTab === 'home' && <HomeScreen recipes={recipes} diaryEntries={diaryEntries} locale={locale} tablet={tablet} goals={{ ...goals, ...(dailyTargets.find((item) => item.weekday === new Date().getDay()) ?? {}) }} onOpen={setSelectedRecipe} onGoRecipes={() => setActiveTab('recipes')} onGoDiary={() => setActiveTab('diary')} onCreate={openCreate} onSettings={() => setSettingsVisible(true)} />}
           {activeTab === 'recipes' && <RecipesScreen recipes={recipes} locale={locale} tablet={tablet} categoryOptions={categoryOptions} onOpen={setSelectedRecipe} onFavorite={toggleFavorite} onCreate={openCreate} />}
+          {activeTab === 'diary' && <FoodDiaryScreen locale={locale} tablet={tablet} recipes={recipes} entries={diaryEntries} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} goals={goals} dailyTargets={dailyTargets} plans={plans} onChange={setDiaryEntries} onOpenRecipe={setSelectedRecipe} />}
           {activeTab === 'create' && <BuilderScreen key={editingRecipe?.id ?? `new-${recipes.length}`} locale={locale} tablet={tablet} landscape={screenLandscape} wideLandscape={wideLandscape} initialRecipe={editingRecipe} categoryOptions={categoryOptions} categoryStyles={categoryStyles} recentIngredientNames={recentIngredientNames} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} onIngredientUsed={(name) => setRecentIngredientNames((current) => [name, ...current.filter((item) => item !== name)].slice(0, 12))} onAddCategory={(name) => setCustomCategories((current) => [...current, { name, color: colors.lime, icon: 'nutrition-outline' }])} onSave={saveRecipe} onCancel={() => { setEditingRecipe(null); setActiveTab('home'); }} />}
           {activeTab === 'planner' && <PlannerScreen recipes={recipes} locale={locale} landscape={landscape} plans={plans} shopping={shopping} trainingDays={trainingDays} onTrainingDays={setTrainingDays} onAddPlan={(entry) => setPlans((current) => [...current, entry])} onRemovePlan={(id) => setPlans((current) => current.filter((entry) => entry.id !== id))} onOpenRecipe={setSelectedRecipe} onGenerateShopping={generateShopping} onToggleShopping={(id) => setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item))} onRemoveShopping={(id) => setShopping((current) => current.filter((item) => item.id !== id))} />}
           {activeTab === 'macros' && <PerformanceHub locale={locale} tablet={tablet} goals={goals} recipes={recipes} plans={plans} dailyTargets={dailyTargets} onDailyTargets={setDailyTargets} weights={weights} onWeights={setWeights} vitamins={vitamins} onVitamins={setVitamins} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} trainingDays={trainingDays} />}
+          {activeTab === 'friends' && <FriendsScreen locale={locale} tablet={tablet} user={accountUser} recipes={recipes} syncState={accountSyncState} onAuthenticated={connectAccount} onSignedOut={() => { setAccountUser(null); setAccountReady(false); setAccountSyncState('offline'); }} onAcceptRecipe={(recipe) => { setRecipes((current) => [recipe, ...current]); setSelectedRecipe(recipe); }} />}
           {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} compact={compactLandscape} onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
         </View>
       </View>
       <RecipeDetail recipe={selectedLive} visible={!!selectedLive} locale={locale} tablet={tablet} unitSystem={unitSystem} onClose={() => setSelectedRecipe(null)} onFavorite={toggleFavorite} onDelete={deleteRecipe} onEdit={editRecipe} onDuplicate={duplicateRecipe} onShare={shareRecipe} onCook={(recipe) => { setSelectedRecipe(null); setCookingRecipe(recipe); }} onAddShopping={(recipe) => { addRecipeToShopping(recipe); Alert.alert('MauGainZ', t(locale, 'Added to your shopping list.', 'Toegevoegd aan je boodschappenlijst.')); }} />
       {cookingRecipe && <CookingMode recipe={cookingRecipe} locale={locale} onClose={() => setCookingRecipe(null)} />}
-      <SettingsModal visible={settingsVisible} locale={locale} categories={customCategories} goals={goals} unitSystem={unitSystem} backupText={backupText} cloudReady={cloudConfigured} syncCode={syncCode} lastSyncedAt={lastSyncedAt} onSyncCode={setSyncCode} onCloudUpload={cloudUpload} onCloudDownload={cloudDownload} onClose={() => setSettingsVisible(false)} onGoals={setGoals} onUnitSystem={setUnitSystem} onRenameCategory={renameCategory} onDeleteCategory={deleteCategory} onCategoryStyle={styleCategory} onExport={exportBackup} onImport={importBackup} />
+      <SettingsModal visible={settingsVisible} locale={locale} categories={customCategories} goals={goals} unitSystem={unitSystem} backupText={backupText} cloudReady={cloudConfigured} syncCode={syncCode} lastSyncedAt={lastSyncedAt} onSyncCode={setSyncCode} onCloudUpload={cloudUpload} onCloudDownload={cloudDownload} onClose={() => setSettingsVisible(false)} onGoals={setGoals} onUnitSystem={setUnitSystem} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} onRenameCategory={renameCategory} onDeleteCategory={deleteCategory} onCategoryStyle={styleCategory} onExport={exportBackup} onImport={importBackup} />
       <UpdateModal update={availableUpdate} locale={locale} onClose={() => setAvailableUpdate(null)} />
     </SafeAreaView>
   );
@@ -1204,7 +1271,8 @@ const styles = StyleSheet.create({
   tabletScreenContent: { width: '100%', maxWidth: 1680, alignSelf: 'center', paddingHorizontal: 34, paddingTop: 30, paddingBottom: 54 },
   builderContent: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 140 },
   tabletBuilderContent: { width: '100%', maxWidth: 1780, alignSelf: 'center', flexGrow: 1, paddingHorizontal: 28, paddingTop: 24, paddingBottom: 34 },
-  builderSaveDock: { position: 'absolute', left: 18, right: 18, bottom: 86, zIndex: 30, elevation: 20 },
+  builderContentKeyboardOpen: { paddingBottom: 320 },
+  builderSaveDock: { position: 'absolute', left: 18, right: 18, bottom: 94, zIndex: 30, elevation: 20 },
   builderSaveDockTablet: { left: undefined, right: 28, bottom: 24, width: 270 },
   builderDockButton: { height: 58, borderRadius: 18, backgroundColor: colors.lime, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#000', shadowOpacity: .45, shadowRadius: 14, elevation: 14 },
   builderDockText: { color: colors.black, fontSize: 11, fontWeight: '900', letterSpacing: .7 },
@@ -1253,6 +1321,8 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroLabel: { backgroundColor: 'rgba(11,12,9,0.12)', borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 6 },
   heroLabelText: { color: colors.black, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  heroDiaryButton: { minHeight: 38, borderRadius: 13, backgroundColor: '#F3F4F285', paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heroDiaryButtonText: { color: colors.black, fontSize: 8, fontWeight: '900', letterSpacing: .5 },
   heroNumber: { color: colors.black, fontSize: 46, lineHeight: 52, fontWeight: '900', letterSpacing: -2, marginTop: 12 },
   heroUnit: { color: 'rgba(11,12,9,0.62)', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   heroProgressTrack: { height: 8, backgroundColor: 'rgba(11,12,9,0.15)', borderRadius: 4, overflow: 'hidden', marginTop: 16 },

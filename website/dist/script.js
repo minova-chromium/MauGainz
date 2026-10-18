@@ -2,7 +2,7 @@
 
 const translations = {
   en: {
-    navSystem: "The system", navScreens: "Phone & tablet", navInstall: "Install", download: "Download",
+    navSystem: "The system", navScreens: "Phone & tablet", navInstall: "Install", navAccount: "My account", account: "Account", download: "Download",
     available: "Available for Android", heroLineOne: "Build your fuel.", heroLineTwo: "Own every gram.",
     heroLede: "Recipes, verified nutrition, meal planning and training structure—built into one focused Android app for people who take progress seriously.",
     downloadApk: "Download Android APK", explore: "Explore MauGainZ", phoneTablet: "Phone + tablet", languages: "English + Dutch", updates: "Built-in updates", seeSystem: "See the system",
@@ -25,7 +25,7 @@ const translations = {
     releaseReady: "Latest official release detected."
   },
   nl: {
-    navSystem: "Het systeem", navScreens: "Telefoon & tablet", navInstall: "Installeren", download: "Download",
+    navSystem: "Het systeem", navScreens: "Telefoon & tablet", navInstall: "Installeren", navAccount: "Mijn account", account: "Account", download: "Download",
     available: "Beschikbaar voor Android", heroLineOne: "Bouw je brandstof.", heroLineTwo: "Beheers elke gram.",
     heroLede: "Recepten, geverifieerde voeding, maaltijdplanning en trainingsstructuur—samengebracht in één doelgerichte Android-app voor mensen die vooruitgang serieus nemen.",
     downloadApk: "Download Android-APK", explore: "Ontdek MauGainZ", phoneTablet: "Telefoon + tablet", languages: "Engels + Nederlands", updates: "Ingebouwde updates", seeSystem: "Bekijk het systeem",

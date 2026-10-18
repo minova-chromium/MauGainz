@@ -42,7 +42,7 @@ export type Recipe = {
   stepTimers?: number[];
 };
 
-export type TabName = 'home' | 'recipes' | 'create' | 'planner' | 'macros';
+export type TabName = 'home' | 'recipes' | 'diary' | 'create' | 'planner' | 'macros' | 'friends';
 
 export type Locale = 'en' | 'nl';
 
@@ -84,6 +84,22 @@ export type MealPlanEntry = {
   tag?: string;
 };
 
+export type FoodDiaryEntry = {
+  id: string;
+  date: string;
+  meal: MealPlanEntry['meal'];
+  source: 'recipe' | 'product';
+  name: string;
+  nameNl?: string;
+  amount: number;
+  unit: 'portion' | 'g' | 'ml';
+  macros: Macros;
+  createdAt: number;
+  recipeId?: string;
+  ingredientId?: string;
+  planEntryId?: string;
+};
+
 export type DailyMacroTarget = Macros & {
   weekday: number;
 };
@@ -113,6 +129,7 @@ export type SavedIngredient = {
   brand?: string;
   barcode?: string;
   baseUnit: 'g' | 'ml';
+  servingSize?: number;
   nutritionPer100: Macros;
 };
 

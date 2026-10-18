@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.3.1';
+export const APP_VERSION = '2.4.0';
 
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/minova-chromium/MauGainz/releases/latest';
 

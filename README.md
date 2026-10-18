@@ -1,12 +1,14 @@
 # MauGainZ
 
-An Android-first performance cookbook for building recipes, tracking exact ingredient amounts, following preparation step by step, and recording per-serving macros. MauGainZ includes English and Dutch interfaces, responsive phone/tablet layouts, drag ordering, Open Food Facts nutrition lookup, barcode scanning, and recipe import from websites, photos, or pasted text.
+An Android-first performance nutrition app for building recipes, tracking meals and exact ingredient amounts, following preparation step by step, and recording macros, weight, vitamins, and training plans. MauGainZ includes English and Dutch interfaces, responsive phone/tablet layouts, drag ordering, Open Food Facts nutrition lookup, barcode scanning, and recipe import from websites, photos, or pasted text.
 
 ## Download
 
 Download the newest universal Android APK from [GitHub Releases](https://github.com/minova-chromium/MauGainz/releases/latest). Android may ask you to allow APK installation from your browser the first time.
 
 The official product site is published through GitHub Pages at [minova-chromium.github.io/MauGainz](https://minova-chromium.github.io/MauGainz/). Its download button reads GitHub's latest-release API, so a newly published APK appears on the website automatically without requiring a separate website edit.
+
+The site also includes a desktop account dashboard at [`/app.html`](https://minova-chromium.github.io/MauGainz/app.html). The same email/password account works in Android and on the web, with private Firestore synchronization and opt-in recipe sharing between friends.
 
 MauGainZ checks the latest official GitHub release when the app starts. When a newer semantic version is available, an in-app English/Dutch update screen links directly to the universal APK. Android always keeps the final installation confirmation under the user's control.
 
@@ -16,24 +18,21 @@ MauGainZ checks the latest official GitHub release when the app starts. When a n
 - Scan EAN/UPC barcodes or search Open Food Facts; verified per-100-g nutrition is stored with the ingredient.
 - Automatic macro calculation uses the matched database values first and the built-in offline profile as fallback.
 - Import recipe JSON-LD from websites, scan printed recipes locally with ML Kit OCR, or paste free-form English/Dutch recipe text.
-- Cloud backup uses an anonymous Firebase account and a private 20-character device-link code.
+- Email/password accounts synchronize recipes, diary entries, targets, progress, meal plans, ingredients, vitamins, and training days across phone, tablet, and desktop.
+- Friend codes support friend requests and deliberate recipe sharing without exposing private diary or weight data.
 
-## Enable cloud sync
+## Firebase account backend
 
-Create a Firebase project, enable Anonymous Authentication and Cloud Firestore, then provide these variables when bundling:
+The production client configuration is in `src/firebaseConfig.ts`. Firebase web configuration values are public identifiers; access is protected by Authentication and the repository's `firestore.rules`.
+
+You can override the production identifiers for another Firebase project when bundling:
 
 ```text
 EXPO_PUBLIC_FIREBASE_API_KEY=...
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
 ```
 
-The Firestore rules only need document access for authenticated users; listing sync codes should remain disabled:
-
-```text
-match /maugainzSync/{code} {
-  allow get, create, update: if request.auth != null;
-}
-```
+Deploy `firestore.rules` before using a replacement project. The rules isolate private account data by Firebase UID and only expose the minimum friend/profile records required for sharing.
 
 ## Run on Android
 

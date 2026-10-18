@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { DailyMacroTarget, Ingredient, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, TrainingDay, UserGoals, VitaminEntry, WeightEntry } from './types';
@@ -25,7 +25,7 @@ export function savedIngredientToRecipe(item: SavedIngredient): Ingredient {
     nameNl: item.nameNl,
     brand: item.brand,
     barcode: item.barcode,
-    amount: '100',
+    amount: String(item.servingSize ?? 100),
     unit: item.baseUnit,
     nutritionPer100: item.nutritionPer100,
     nutritionSource: 'maugainz'
@@ -48,15 +48,16 @@ export function IngredientLibraryModal({ visible, locale, ingredients, onChange,
   const [brand, setBrand] = useState('');
   const [barcode, setBarcode] = useState('');
   const [baseUnit, setBaseUnit] = useState<'g' | 'ml'>('g');
+  const [servingSize, setServingSize] = useState('100');
   const [macro, setMacro] = useState<Record<keyof Macros, string>>({ calories: '', protein: '', carbs: '', fat: '', fiber: '' });
 
-  const reset = () => { setEditingId(null); setEditingBase(null); setName(''); setBrand(''); setBarcode(''); setBaseUnit('g'); setMacro({ calories: '', protein: '', carbs: '', fat: '', fiber: '' }); };
+  const reset = () => { setEditingId(null); setEditingBase(null); setName(''); setBrand(''); setBarcode(''); setBaseUnit('g'); setServingSize('100'); setMacro({ calories: '', protein: '', carbs: '', fat: '', fiber: '' }); };
   const overrideFor = (name: string, nameNl?: string) => ingredients.find((item) => normalize(item.name) === normalize(name) || (!!nameNl && normalize(item.nameNl ?? item.name) === normalize(nameNl)));
   const isBaseIngredient = (item: SavedIngredient) => baseIngredientProfiles.some((base) => normalize(base.name) === normalize(item.name) || (!!base.nameNl && normalize(base.nameNl) === normalize(item.nameNl ?? item.name)));
   const edit = (item: SavedIngredient, base = false) => {
     const override = base ? overrideFor(item.name, item.nameNl) : item;
     const values = override ?? item;
-    setEditingId(override?.id ?? (base ? null : item.id)); setEditingBase(base ? { name: item.name, nameNl: item.nameNl } : null); setName(locale === 'nl' ? values.nameNl || item.nameNl || values.name : values.name); setBrand(values.brand ?? ''); setBarcode(values.barcode ?? ''); setBaseUnit(values.baseUnit);
+    setEditingId(override?.id ?? (base ? null : item.id)); setEditingBase(base ? { name: item.name, nameNl: item.nameNl } : null); setName(locale === 'nl' ? values.nameNl || item.nameNl || values.name : values.name); setBrand(values.brand ?? ''); setBarcode(values.barcode ?? ''); setBaseUnit(values.baseUnit); setServingSize(String(values.servingSize ?? 100));
     setMacro(Object.fromEntries(Object.entries(values.nutritionPer100).map(([key, value]) => [key, String(value)])) as Record<keyof Macros, string>);
   };
   const save = () => {
@@ -65,6 +66,7 @@ export function IngredientLibraryModal({ visible, locale, ingredients, onChange,
       id: editingId ?? `saved-${Date.now()}`,
       name: editingBase?.name ?? name.trim(), nameNl: editingBase?.nameNl ?? name.trim(), brand: brand.trim() || undefined, barcode: barcode.trim() || undefined,
       baseUnit,
+      servingSize: Math.max(0, number(servingSize)) || 100,
       nutritionPer100: { calories: number(macro.calories), protein: number(macro.protein), carbs: number(macro.carbs), fat: number(macro.fat), fiber: number(macro.fiber) }
     };
     onChange(editingId ? ingredients.map((current) => current.id === editingId ? item : current) : [item, ...ingredients]);
@@ -75,9 +77,9 @@ export function IngredientLibraryModal({ visible, locale, ingredients, onChange,
   const ownIngredients = ingredients.filter((item) => !isBaseIngredient(item)).filter((item) => normalize(`${item.name} ${item.nameNl ?? ''} ${item.brand ?? ''}`).includes(normalize(query)));
 
   return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={s.safe}>
+    <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}><SafeAreaView style={s.safe}>
       <View style={s.top}><View><Text style={s.eyebrow}>{tr(locale, 'YOUR VERIFIED DATA', 'JOUW GECONTROLEERDE DATA')}</Text><Text style={s.title}>{tr(locale, 'Ingredient macro library', 'Macrobibliotheek ingrediënten')}</Text></View><Pressable onPress={onClose} style={s.circle}>{ico('close', 22)}</Pressable></View>
-      <ScrollView contentContainerStyle={s.modalContent} keyboardShouldPersistTaps="always">
+      <ScrollView contentContainerStyle={s.modalContent} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
         <View style={s.libraryTabs}><Pressable onPress={() => { reset(); setActiveTab('base'); }} style={[s.libraryTab, activeTab === 'base' && s.libraryTabActive]}><Text style={[s.libraryTabText, activeTab === 'base' && s.dark]}>{tr(locale, 'MAUGAINZ BASE', 'MAUGAINZ STANDAARD')}</Text><Text style={[s.libraryTabCount, activeTab === 'base' && s.dark]}>{baseIngredientProfiles.length}</Text></Pressable><Pressable onPress={() => { reset(); setActiveTab('mine'); }} style={[s.libraryTab, activeTab === 'mine' && s.libraryTabActive]}><Text style={[s.libraryTabText, activeTab === 'mine' && s.dark]}>{tr(locale, 'MY INGREDIENTS', 'MIJN INGREDIËNTEN')}</Text><Text style={[s.libraryTabCount, activeTab === 'mine' && s.dark]}>{ownIngredients.length}</Text></Pressable></View>
         <View style={s.librarySearch}>{ico('search-outline', 18, colors.muted)}<TextInput value={query} onChangeText={setQuery} placeholder={tr(locale, 'Search all ingredients', 'Zoek in alle ingrediënten')} placeholderTextColor={colors.muted} style={s.librarySearchInput} />{!!query && <Pressable onPress={() => setQuery('')}>{ico('close-circle', 18, colors.muted)}</Pressable>}</View>
         {(activeTab === 'mine' || editingBase) && <View style={s.editorCard}>
@@ -89,13 +91,15 @@ export function IngredientLibraryModal({ visible, locale, ingredients, onChange,
           <View style={s.unitRow}>{(['g', 'ml'] as const).map((unit) => <Pressable key={unit} onPress={() => setBaseUnit(unit)} style={[s.unit, baseUnit === unit && s.unitActive]}><Text style={[s.unitText, baseUnit === unit && s.dark]}>100 {unit}</Text></Pressable>)}</View>
           <Text style={s.label}>{tr(locale, 'NUTRITION PER 100 G / ML', 'VOEDINGSWAARDEN PER 100 G / ML')}</Text>
           <View style={s.macroGrid}>{([['calories', 'KCAL'], ['protein', 'P'], ['carbs', 'C'], ['fat', 'F'], ['fiber', tr(locale, 'FIBER', 'VEZEL')]] as [keyof Macros, string][]).map(([key, label]) => <View key={key} style={s.macroField}><Text style={s.miniLabel}>{label}</Text><TextInput value={macro[key]} onChangeText={(value) => setMacro((current) => ({ ...current, [key]: value }))} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={s.macroInput} /></View>)}</View>
+          <Text style={s.label}>{tr(locale, 'DEFAULT QUICK-ADD AMOUNT', 'STANDAARDHOEVEELHEID')} ({baseUnit})</Text>
+          <TextInput value={servingSize} onChangeText={setServingSize} keyboardType="decimal-pad" placeholder="100" placeholderTextColor={colors.muted} style={s.input} />
           <View style={s.row}><Pressable disabled={!name.trim() || number(macro.calories) <= 0} onPress={save} style={[s.primary, s.flex, (!name.trim() || number(macro.calories) <= 0) && s.disabled]}>{ico('save-outline', 18, colors.black)}<Text style={s.primaryText}>{editingBase ? tr(locale, 'SAVE MY OVERRIDE', 'MIJN AANPASSING OPSLAAN') : editingId ? tr(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : tr(locale, 'ADD INGREDIENT', 'INGREDIËNT TOEVOEGEN')}</Text></Pressable>{(editingId || editingBase) && <Pressable onPress={reset} style={s.secondary}>{ico('close', 18, colors.lime)}</Pressable>}</View>
         </View>}
         <View style={s.listHeader}><View><Text style={s.sectionTitle}>{activeTab === 'base' ? tr(locale, 'MauGainZ base ingredients', 'MauGainZ-standaardingrediënten') : tr(locale, 'My saved ingredients', 'Mijn opgeslagen ingrediënten')}</Text><Text style={s.help}>{activeTab === 'base' ? tr(locale, 'Tap any ingredient to change its default macro values.', 'Tik op een ingrediënt om de standaardmacrowaarden aan te passen.') : tr(locale, 'Your own products and confirmed database matches.', 'Je eigen producten en bevestigde databasematches.')}</Text></View><Text style={s.count}>{activeTab === 'base' ? filteredBase.length : ownIngredients.length}</Text></View>
         {activeTab === 'mine' && !ownIngredients.length && <View style={s.empty}><Text style={s.emptyTitle}>{tr(locale, 'Your personal library is empty.', 'Je persoonlijke bibliotheek is leeg.')}</Text><Text style={s.help}>{tr(locale, 'Add label values here or confirm a detected ingredient while building a recipe.', 'Voeg hier etiketwaarden toe of bevestig een gevonden ingrediënt tijdens het maken van een recept.')}</Text></View>}
         {activeTab === 'base' ? filteredBase.map((base) => { const override = overrideFor(base.name, base.nameNl); const item = override ?? base; return <View key={base.id} style={s.ingredientRow}><Pressable onPress={() => edit(base, true)} style={s.ingredientBody}><View style={s.ingredientTitleRow}><Text style={s.ingredientName}>{locale === 'nl' ? base.nameNl || base.name : base.name}</Text>{override && <Text style={s.overrideBadge}>{tr(locale, 'CHANGED', 'AANGEPAST')}</Text>}</View><Text style={s.ingredientMeta}>{base.group} · {item.nutritionPer100.calories} kcal / 100 {item.baseUnit}</Text><Text style={s.ingredientMacros}>P {item.nutritionPer100.protein} · C {item.nutritionPer100.carbs} · F {item.nutritionPer100.fat} · {tr(locale, 'fiber', 'vezel')} {item.nutritionPer100.fiber}</Text></Pressable>{onSelect && <Pressable onPress={() => { onSelect(savedIngredientToRecipe(item)); onClose(); }} style={s.addCircle}>{ico('add', 21, colors.black)}</Pressable>}{override && <Pressable onPress={() => onChange(ingredients.filter((current) => current.id !== override.id))} hitSlop={8} style={s.trash}>{ico('refresh-outline', 18, colors.muted)}</Pressable>}</View>; }) : ownIngredients.map((item) => <View key={item.id} style={s.ingredientRow}><Pressable onPress={() => edit(item)} style={s.ingredientBody}><Text style={s.ingredientName}>{locale === 'nl' ? item.nameNl || item.name : item.name}</Text><Text style={s.ingredientMeta}>{item.brand ? `${item.brand} · ` : ''}{item.nutritionPer100.calories} kcal / 100 {item.baseUnit}</Text><Text style={s.ingredientMacros}>P {item.nutritionPer100.protein} · C {item.nutritionPer100.carbs} · F {item.nutritionPer100.fat} · {tr(locale, 'fiber', 'vezel')} {item.nutritionPer100.fiber}</Text></Pressable>{onSelect && <Pressable onPress={() => { onSelect(savedIngredientToRecipe(item)); onClose(); }} style={s.addCircle}>{ico('add', 21, colors.black)}</Pressable>}<Pressable onPress={() => onChange(ingredients.filter((current) => current.id !== item.id))} hitSlop={8} style={s.trash}>{ico('trash-outline', 18, colors.muted)}</Pressable></View>)}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaView></KeyboardAvoidingView>
   </Modal>;
 }
 
@@ -125,7 +129,7 @@ export function PerformanceHub({ locale, tablet, goals, recipes, plans, dailyTar
   const plannedForDay = useMemo(() => plans.filter((entry) => new Date(`${entry.date}T12:00:00`).getDay() === selectedDay).map((entry) => recipes.find((recipe) => recipe.id === entry.recipeId)).filter((recipe): recipe is Recipe => !!recipe), [plans, recipes, selectedDay]);
   const plannedMacros = plannedForDay.reduce((sum, recipe) => ({ calories: sum.calories + recipe.macros.calories, protein: sum.protein + recipe.macros.protein, carbs: sum.carbs + recipe.macros.carbs, fat: sum.fat + recipe.macros.fat, fiber: sum.fiber + recipe.macros.fiber }), emptyMacros());
 
-  return <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.hubPage, tablet && s.hubPageTablet]} keyboardShouldPersistTaps="always">
+  return <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.hubPage, tablet && s.hubPageTablet]} keyboardShouldPersistTaps="always" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
     <View style={s.hubHeader}><View style={s.hubHeaderText}><Text style={s.eyebrow}>{tr(locale, 'ALL-AROUND PERFORMANCE', 'COMPLETE PERFORMANCE')}</Text><Text style={s.hubTitle}>{tr(locale, 'MauGainZ Control Center', 'MauGainZ Controlecentrum')}</Text></View><View style={s.hubBadge}>{ico('barbell-outline', 25, colors.black)}</View></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.days}>{dayOrder.map((weekday) => <Pressable key={weekday} onPress={() => setSelectedDay(weekday)} style={[s.day, selectedDay === weekday && s.dayActive]}><Text style={[s.dayText, selectedDay === weekday && s.dark]}>{dayName(weekday, locale, true).toUpperCase()}</Text><Text style={[s.dayKcal, selectedDay === weekday && s.dark]}>{dailyTargets.find((item) => item.weekday === weekday)?.calories ?? goals.calories}</Text></Pressable>)}</ScrollView>
     <View style={[s.hubGrid, tablet && s.hubGridTablet]}>

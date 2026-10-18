@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
-import { CategoryOption, DailyMacroTarget, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './types';
+import { firebaseConfig } from './firebaseConfig';
+import { CategoryOption, DailyMacroTarget, FoodDiaryEntry, MealPlanEntry, Recipe, SavedIngredient, ShoppingItem, TrainingDay, UnitSystem, UserGoals, VitaminEntry, WeightEntry } from './types';
 
 export type BackupPayload = {
   version: number;
@@ -15,10 +16,11 @@ export type BackupPayload = {
   vitamins?: VitaminEntry[];
   savedIngredients?: SavedIngredient[];
   trainingDays?: TrainingDay[];
+  diaryEntries?: FoodDiaryEntry[];
 };
 
-const API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '';
-const PROJECT_ID = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? '';
+const API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? firebaseConfig.apiKey;
+const PROJECT_ID = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? firebaseConfig.projectId;
 const AUTH_KEY = '@maugainz/cloud-auth-v1';
 export const cloudConfigured = Boolean(API_KEY && PROJECT_ID);
 

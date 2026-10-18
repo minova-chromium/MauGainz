@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0c09">
+  <meta name="description" content="Your MauGainZ recipes, food diary, meal plan and friends on desktop.">
+  <title>MauGainZ Account</title>
+  <link rel="icon" href="assets/maugainz-mark.png" type="image/png">
+  <link rel="stylesheet" href="dashboard.css">
+  <script defer src="site-config.js"></script>
+  <script type="module" src="dashboard.js"></script>
+</head>
+<body>
+  <div class="loading-screen" data-loading><img src="assets/maugainz-mark.png" alt=""><span></span></div>
+
+  <main class="auth-page" data-auth hidden>
+    <a class="auth-brand" href="index.html"><img src="assets/maugainz-mark.png" alt=""><b>MauGain<span>Z</span></b></a>
+    <section class="auth-intro">
+      <span class="eyebrow">MAUGAINZ CLOUD</span>
+      <h1>Your fuel.<br><em>Everywhere.</em></h1>
+      <p>One account for your phone, tablet and desktop. Your diary stays private; only recipes you choose are shared with friends.</p>
+      <div class="auth-points"><span>✓ Automatic synchronization</span><span>✓ Private nutrition and weight data</span><span>✓ Recipe sharing with friends</span></div>
+    </section>
+    <section class="auth-card">
+      <div class="auth-switch"><button class="is-active" data-auth-mode="login">Sign in</button><button data-auth-mode="signup">Create account</button></div>
+      <form data-auth-form>
+        <label data-name-field hidden>Display name<input name="displayName" autocomplete="name" placeholder="How friends see you"></label>
+        <label>Email<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters"></label>
+        <p class="form-error" data-auth-error role="alert"></p>
+        <button class="primary-button" type="submit" data-auth-submit>SIGN IN <span>→</span></button>
+      </form>
+      <button class="text-button" data-reset-password>Forgot password?</button>
+      <a class="back-link" href="index.html">← Back to MauGainZ</a>
+    </section>
+  </main>
+
+  <div class="dashboard" data-dashboard hidden>
+    <aside class="sidebar">
+      <a class="side-brand" href="index.html"><img src="assets/maugainz-mark.png" alt=""><b>MauGain<span>Z</span></b></a>
+      <nav>
+        <button class="is-active" data-view="overview"><span>⌂</span>Overview</button>
+        <button data-view="diary"><span>▣</span>Diary</button>
+        <button data-view="recipes"><span>□</span>Recipes</button>
+        <button data-view="plan"><span>▦</span>Plan</button>
+        <button data-view="friends"><span>♟</span>Friends</button>
+      </nav>
+      <div class="side-user"><div class="avatar" data-avatar>M</div><div><b data-user-name>Athlete</b><small data-user-email></small></div><button data-sign-out title="Sign out">↗</button></div>
+    </aside>
+
+    <header class="mobile-header"><button data-mobile-menu>☰</button><a href="index.html"><img src="assets/maugainz-mark.png" alt="">MauGainZ</a><span class="sync-dot" data-sync-dot></span></header>
+
+    <section class="workspace">
+      <header class="workspace-header"><div><span class="eyebrow" data-date-label>TODAY</span><h1 data-view-title>Command center</h1></div><div class="sync-state"><span data-sync-dot></span><b data-sync-label>Synced</b></div></header>
+
+      <div class="view is-active" data-view-panel="overview">
+        <section class="hero-card"><div><span>TODAY'S FUEL</span><strong><b data-today-kcal>0</b><small data-kcal-target> / 3,060 KCAL</small></strong><div class="progress"><i data-kcal-progress></i></div><div class="macro-row"><div><b data-today-protein>0g</b><span>Protein</span></div><div><b data-today-carbs>0g</b><span>Carbs</span></div><div><b data-today-fat>0g</b><span>Fat</span></div></div></div><span class="bolt">ϟ</span></section>
+        <div class="stat-grid"><article><span>RECIPES</span><b data-recipe-count>0</b><small>In your cookbook</small></article><article><span>MEALS TODAY</span><b data-meal-count>0</b><small>Diary entries</small></article><article><span>TRAINING</span><b data-training-today>Rest</b><small>Today's session</small></article></div>
+        <section class="panel"><div class="panel-heading"><div><span class="eyebrow">TODAY</span><h2>Recent fuel</h2></div><button class="small-button" data-go-diary>+ ADD FOOD</button></div><div class="entry-list" data-recent-entries></div></section>
+      </div>
+
+      <div class="view" data-view-panel="diary">
+        <div class="two-column">
+          <section class="panel quick-add"><span class="eyebrow">QUICK ADD</span><h2>Add a product or snack</h2><form data-food-form><label>Name<input name="name" required placeholder="Protein bar"></label><div class="form-grid"><label>Amount<input name="amount" type="number" min="0" step="0.1" value="1" required></label><label>Unit<select name="unit"><option value="portion">Portion</option><option value="g">g</option><option value="ml">ml</option></select></label></div><div class="form-grid macros"><label>Kcal<input name="calories" type="number" min="0" value="0"></label><label>Protein<input name="protein" type="number" min="0" step="0.1" value="0"></label><label>Carbs<input name="carbs" type="number" min="0" step="0.1" value="0"></label><label>Fat<input name="fat" type="number" min="0" step="0.1" value="0"></label></div><label>Meal<select name="meal"><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option></select></label><button class="primary-button" type="submit">ADD TO DIARY <span>+</span></button></form></section>
+          <section class="panel"><div class="panel-heading"><div><span class="eyebrow">FOOD DIARY</span><h2>Today's meals</h2></div><b class="big-total"><span data-diary-total>0</span> kcal</b></div><div class="entry-list" data-diary-entries></div></section>
+        </div>
+      </div>
+
+      <div class="view" data-view-panel="recipes"><section class="panel"><div class="panel-heading"><div><span class="eyebrow">COOKBOOK</span><h2>Your recipes</h2></div><input class="search" data-recipe-search placeholder="Search recipes"></div><div class="recipe-grid" data-recipes></div></section></div>
+
+      <div class="view" data-view-panel="plan"><div class="two-column"><section class="panel"><span class="eyebrow">WEEKLY PLAN</span><h2>Upcoming meals</h2><div class="plan-list" data-plans></div></section><section class="panel"><span class="eyebrow">TRAINING</span><h2>Your split</h2><div class="plan-list" data-training></div></section></div></div>
+
+      <div class="view" data-view-panel="friends">
+        <section class="friend-hero"><div><span class="eyebrow">YOUR FRIEND CODE</span><b data-friend-code>--------</b><p>Share this code with another MauGainZ athlete.</p></div><button data-copy-code>COPY CODE</button></section>
+        <div class="two-column">
+          <section class="panel"><span class="eyebrow">CONNECT</span><h2>Add a friend</h2><form class="inline-form" data-friend-form><input name="code" placeholder="ABCD1234" maxlength="12" required><button class="primary-button" type="submit">SEND</button></form><h3 class="subheading">Requests</h3><div class="friend-list" data-friend-requests></div><h3 class="subheading">Friends</h3><div class="friend-list" data-friends></div></section>
+          <section class="panel"><span class="eyebrow">SHARE</span><h2>Send a recipe</h2><form data-share-form><label>Friend<select name="friend" required></select></label><label>Recipe<select name="recipe" required></select></label><button class="primary-button" type="submit">SHARE RECIPE <span>→</span></button></form><h3 class="subheading">Shared with you</h3><div class="share-list" data-shared-recipes></div></section>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="toast" data-toast role="status"></div>
+</body>
+</html>
