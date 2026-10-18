@@ -35,7 +35,7 @@ import { APP_VERSION, AppUpdate, checkForAppUpdate } from './src/updater';
 import { IngredientLibraryModal, PerformanceHub } from './src/AllAround';
 import { FoodDiaryScreen } from './src/FoodDiary';
 import { FriendsScreen } from './src/Friends';
-import { AccountUser, downloadAccountData, getAccountDataOwner, restoreAccount, uploadAccountData } from './src/accountSync';
+import { AccountUser, CoachingRelationship, downloadAccountData, downloadManagedClientData, getAccountDataOwner, listCoachingRelationships, restoreAccount, uploadAccountData, uploadManagedAthleteData, uploadManagedClientData } from './src/accountSync';
 
 const STORAGE_KEY = '@maugains/recipes-v1';
 const LOCALE_KEY = '@maugains/locale-v1';
@@ -1105,6 +1105,8 @@ function MauGainzApp() {
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [accountSyncState, setAccountSyncState] = useState<'offline' | 'syncing' | 'synced' | 'error'>('offline');
+  const [coachingRelationships, setCoachingRelationships] = useState<CoachingRelationship[]>([]);
+  const [managingClient, setManagingClient] = useState<CoachingRelationship | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -1158,15 +1160,22 @@ function MauGainzApp() {
   }, [recipes, customCategories]);
 
   const selectedLive = useMemo(() => selectedRecipe ? recipes.find((recipe) => recipe.id === selectedRecipe.id) ?? null : null, [selectedRecipe, recipes]);
+  const managedByCoach = useMemo(() => coachingRelationships.find((item) => item.clientUid === accountUser?.uid && item.status === 'accepted' && item.mode === 'managed') ?? null, [coachingRelationships, accountUser?.uid]);
+  const workspaceLocked = Boolean((managedByCoach && !managingClient) || managingClient?.mode === 'shared');
+  const lockedNotice = () => Alert.alert('MauGainZ Coach Mode', managingClient?.mode === 'shared' ? t(locale, 'This athlete gave review-only access. You cannot change their workspace.', 'Deze sporter gaf alleen inzage. Je kunt de omgeving niet wijzigen.') : t(locale, 'Your coach manages this part of the plan. You can still use the diary and log your weight.', 'Je coach beheert dit deel van het plan. Je kunt nog steeds je dagboek gebruiken en je gewicht registreren.'));
+  const requireWorkspaceEdit = () => { if (workspaceLocked) { lockedNotice(); return false; } return true; };
+  const changeTab = (tab: TabName) => { if (tab === 'create' && !requireWorkspaceEdit()) return; setActiveTab(tab); };
   const toggleFavorite = (id: string) => setRecipes((current) => current.map((recipe) => recipe.id === id ? { ...recipe, favorite: !recipe.favorite } : recipe));
-  const openCreate = () => { setEditingRecipe(null); setActiveTab('create'); };
+  const openCreate = () => { if (!requireWorkspaceEdit()) return; setEditingRecipe(null); setActiveTab('create'); };
   const saveRecipe = (recipe: Recipe) => {
+    if (!requireWorkspaceEdit()) return;
     setRecipes((current) => current.some((item) => item.id === recipe.id) ? current.map((item) => item.id === recipe.id ? { ...recipe, favorite: item.favorite } : item) : [recipe, ...current]);
     setEditingRecipe(null); setActiveTab('recipes'); setSelectedRecipe(recipe);
   };
-  const deleteRecipe = (id: string) => { setRecipes((current) => current.filter((recipe) => recipe.id !== id)); setSelectedRecipe(null); };
-  const editRecipe = (recipe: Recipe) => { setEditingRecipe(recipe); setSelectedRecipe(null); setActiveTab('create'); };
+  const deleteRecipe = (id: string) => { if (!requireWorkspaceEdit()) return; setRecipes((current) => current.filter((recipe) => recipe.id !== id)); setSelectedRecipe(null); };
+  const editRecipe = (recipe: Recipe) => { if (!requireWorkspaceEdit()) return; setEditingRecipe(recipe); setSelectedRecipe(null); setActiveTab('create'); };
   const duplicateRecipe = (recipe: Recipe) => {
+    if (!requireWorkspaceEdit()) return;
     const copy = { ...recipe, id: `recipe-${Date.now()}`, title: `${recipe.title} ${t(locale, 'copy', 'kopie')}`, favorite: false, createdAt: Date.now(), ingredients: recipe.ingredients.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` })) };
     setRecipes((current) => [copy, ...current]); setSelectedRecipe(copy);
   };
@@ -1194,7 +1203,8 @@ function MauGainzApp() {
         if (isNewOwner) applyBackup(initial);
         const syncedAt = await uploadAccountData(initial); setLastSyncedAt(syncedAt);
       }
-      setAccountReady(true); setAccountSyncState('synced');
+      const relationships = await listCoachingRelationships().catch(() => [] as CoachingRelationship[]);
+      setCoachingRelationships(relationships); setAccountReady(true); setAccountSyncState('synced');
     } catch { setAccountSyncState('error'); throw new Error('sync'); }
   };
 
@@ -1209,10 +1219,34 @@ function MauGainzApp() {
     if (!hydrated || !accountUser || !accountReady) return;
     setAccountSyncState('syncing');
     const timer = setTimeout(() => {
-      uploadAccountData(backupPayload()).then((syncedAt) => { setLastSyncedAt(syncedAt); setAccountSyncState('synced'); }).catch(() => setAccountSyncState('error'));
+      const upload = managingClient
+        ? (managingClient.mode === 'managed' ? uploadManagedClientData(managingClient.clientUid, backupPayload()) : Promise.resolve(Date.now()))
+        : managedByCoach
+          ? uploadManagedAthleteData(backupPayload())
+          : uploadAccountData(backupPayload());
+      upload.then((syncedAt) => { setLastSyncedAt(syncedAt); setAccountSyncState('synced'); }).catch(() => setAccountSyncState('error'));
     }, 1200);
     return () => clearTimeout(timer);
-  }, [recipes, customCategories, goals, plans, shopping, unitSystem, dailyTargets, weights, vitamins, savedIngredients, trainingDays, diaryEntries, hydrated, accountUser?.uid, accountReady]);
+  }, [recipes, customCategories, goals, plans, shopping, unitSystem, dailyTargets, weights, vitamins, savedIngredients, trainingDays, diaryEntries, hydrated, accountUser?.uid, accountReady, managingClient?.id, managedByCoach?.id]);
+  const manageClientWorkspace = async (relationship: CoachingRelationship) => {
+    if (!accountUser || managingClient || relationship.coachUid !== accountUser.uid || relationship.status !== 'accepted') return;
+    setAccountReady(false); setAccountSyncState('syncing');
+    try {
+      await uploadAccountData(backupPayload());
+      const cloud = await downloadManagedClientData(relationship.clientUid);
+      applyBackup(cloud?.payload ?? freshAccountPayload());
+      setManagingClient(relationship); setLastSyncedAt(cloud?.updatedAt); setActiveTab('home'); setAccountReady(true); setAccountSyncState('synced');
+    } catch { setAccountReady(true); setAccountSyncState('error'); Alert.alert('MauGainZ', t(locale, 'The athlete workspace could not be opened.', 'De omgeving van de sporter kon niet worden geopend.')); }
+  };
+  const exitClientWorkspace = async () => {
+    if (!managingClient) return;
+    setAccountReady(false); setAccountSyncState('syncing');
+    try {
+      if (managingClient.mode === 'managed') await uploadManagedClientData(managingClient.clientUid, backupPayload());
+      const own = await downloadAccountData();
+      applyBackup(own?.payload ?? freshAccountPayload()); setManagingClient(null); setLastSyncedAt(own?.updatedAt); setActiveTab('friends'); setAccountReady(true); setAccountSyncState('synced');
+    } catch { setAccountReady(true); setAccountSyncState('error'); Alert.alert('MauGainZ', t(locale, 'Could not return to your own workspace.', 'Kon niet terugkeren naar je eigen omgeving.')); }
+  };
   const exportBackup = () => {
     const data = JSON.stringify(backupPayload(), null, 2);
     setBackupText(data); Share.share({ title: 'MauGainZ backup', message: data }).catch(() => undefined);
@@ -1238,21 +1272,22 @@ function MauGainzApp() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} /><ExpoStatusBar style="light" />
       <View style={[styles.flex, tablet && styles.tabletAppFrame]}>
-        {tablet && <BottomNav active={activeTab} locale={locale} tablet onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
+        {tablet && <BottomNav active={activeTab} locale={locale} tablet onChange={changeTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
         <View style={styles.mainContent}>
+          {(managingClient || managedByCoach) && <View style={[styles.coachWorkspaceBar, managingClient ? styles.coachWorkspaceBarActive : undefined]}>{icon(managingClient ? 'shield-checkmark' : 'lock-closed', 18, colors.black)}<View style={styles.coachWorkspaceText}><Text style={styles.coachWorkspaceTitle}>{managingClient ? t(locale, `Managing ${managingClient.clientName}`, `Beheer voor ${managingClient.clientName}`) : t(locale, `Managed by ${managedByCoach?.coachName}`, `Beheerd door ${managedByCoach?.coachName}`)}</Text><Text style={styles.coachWorkspaceSubtitle}>{managingClient ? (managingClient.mode === 'managed' ? t(locale, 'Changes sync to the athlete', 'Wijzigingen synchroniseren met de sporter') : t(locale, 'Review-only workspace', 'Omgeving alleen bekijken')) : t(locale, 'Diary and weight logging remain available', 'Dagboek en gewichtsregistratie blijven beschikbaar')}</Text></View>{managingClient && <Pressable onPress={exitClientWorkspace} style={styles.coachWorkspaceExit}><Text style={styles.coachWorkspaceExitText}>{t(locale, 'EXIT', 'SLUIT')}</Text></Pressable>}</View>}
           {activeTab === 'home' && <HomeScreen recipes={recipes} diaryEntries={diaryEntries} locale={locale} tablet={tablet} goals={{ ...goals, ...(dailyTargets.find((item) => item.weekday === new Date().getDay()) ?? {}) }} onOpen={setSelectedRecipe} onGoRecipes={() => setActiveTab('recipes')} onGoDiary={() => setActiveTab('diary')} onCreate={openCreate} onSettings={() => setSettingsVisible(true)} />}
           {activeTab === 'recipes' && <RecipesScreen recipes={recipes} locale={locale} tablet={tablet} categoryOptions={categoryOptions} onOpen={setSelectedRecipe} onFavorite={toggleFavorite} onCreate={openCreate} />}
-          {activeTab === 'diary' && <FoodDiaryScreen locale={locale} tablet={tablet} recipes={recipes} entries={diaryEntries} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} goals={goals} dailyTargets={dailyTargets} plans={plans} onChange={setDiaryEntries} onOpenRecipe={setSelectedRecipe} />}
+          {activeTab === 'diary' && <FoodDiaryScreen locale={locale} tablet={tablet} recipes={recipes} entries={diaryEntries} savedIngredients={savedIngredients} onSavedIngredients={(value) => { if (workspaceLocked) return lockedNotice(); setSavedIngredients(value); }} goals={goals} dailyTargets={dailyTargets} plans={plans} onChange={setDiaryEntries} onOpenRecipe={setSelectedRecipe} />}
           {activeTab === 'create' && <BuilderScreen key={editingRecipe?.id ?? `new-${recipes.length}`} locale={locale} tablet={tablet} landscape={screenLandscape} wideLandscape={wideLandscape} initialRecipe={editingRecipe} categoryOptions={categoryOptions} categoryStyles={categoryStyles} recentIngredientNames={recentIngredientNames} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} onIngredientUsed={(name) => setRecentIngredientNames((current) => [name, ...current.filter((item) => item !== name)].slice(0, 12))} onAddCategory={(name) => setCustomCategories((current) => [...current, { name, color: colors.lime, icon: 'nutrition-outline' }])} onSave={saveRecipe} onCancel={() => { setEditingRecipe(null); setActiveTab('home'); }} />}
-          {activeTab === 'planner' && <PlannerScreen recipes={recipes} locale={locale} landscape={landscape} plans={plans} shopping={shopping} trainingDays={trainingDays} onTrainingDays={setTrainingDays} onAddPlan={(entry) => setPlans((current) => [...current, entry])} onRemovePlan={(id) => setPlans((current) => current.filter((entry) => entry.id !== id))} onOpenRecipe={setSelectedRecipe} onGenerateShopping={generateShopping} onToggleShopping={(id) => setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item))} onRemoveShopping={(id) => setShopping((current) => current.filter((item) => item.id !== id))} />}
-          {activeTab === 'macros' && <PerformanceHub locale={locale} tablet={tablet} goals={goals} recipes={recipes} plans={plans} dailyTargets={dailyTargets} onDailyTargets={setDailyTargets} weights={weights} onWeights={setWeights} vitamins={vitamins} onVitamins={setVitamins} savedIngredients={savedIngredients} onSavedIngredients={setSavedIngredients} trainingDays={trainingDays} />}
-          {activeTab === 'friends' && <FriendsScreen locale={locale} tablet={tablet} user={accountUser} recipes={recipes} syncState={accountSyncState} onAuthenticated={connectAccount} onSignedOut={() => { setAccountUser(null); setAccountReady(false); setAccountSyncState('offline'); }} onAcceptRecipe={(recipe) => { setRecipes((current) => [recipe, ...current]); setSelectedRecipe(recipe); }} />}
-          {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} compact={compactLandscape} onChange={setActiveTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
+          {activeTab === 'planner' && <PlannerScreen recipes={recipes} locale={locale} landscape={landscape} plans={plans} shopping={shopping} trainingDays={trainingDays} onTrainingDays={(value) => { if (!requireWorkspaceEdit()) return; setTrainingDays(value); }} onAddPlan={(entry) => { if (!requireWorkspaceEdit()) return; setPlans((current) => [...current, entry]); }} onRemovePlan={(id) => { if (!requireWorkspaceEdit()) return; setPlans((current) => current.filter((entry) => entry.id !== id)); }} onOpenRecipe={setSelectedRecipe} onGenerateShopping={(date) => { if (!requireWorkspaceEdit()) return; generateShopping(date); }} onToggleShopping={(id) => { if (!requireWorkspaceEdit()) return; setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item)); }} onRemoveShopping={(id) => { if (!requireWorkspaceEdit()) return; setShopping((current) => current.filter((item) => item.id !== id)); }} />}
+          {activeTab === 'macros' && <PerformanceHub locale={locale} tablet={tablet} goals={goals} recipes={recipes} plans={plans} dailyTargets={dailyTargets} onDailyTargets={(value) => { if (!requireWorkspaceEdit()) return; setDailyTargets(value); }} weights={weights} onWeights={setWeights} vitamins={vitamins} onVitamins={(value) => { if (!requireWorkspaceEdit()) return; setVitamins(value); }} savedIngredients={savedIngredients} onSavedIngredients={(value) => { if (!requireWorkspaceEdit()) return; setSavedIngredients(value); }} trainingDays={trainingDays} />}
+          {activeTab === 'friends' && <FriendsScreen locale={locale} tablet={tablet} user={accountUser} recipes={recipes} syncState={accountSyncState} managingClient={managingClient} onAuthenticated={connectAccount} onSignedOut={() => { setAccountUser(null); setAccountReady(false); setManagingClient(null); setCoachingRelationships([]); setAccountSyncState('offline'); }} onAcceptRecipe={(recipe) => { if (!requireWorkspaceEdit()) return; setRecipes((current) => [recipe, ...current]); setSelectedRecipe(recipe); }} onManageClient={manageClientWorkspace} onExitManagement={exitClientWorkspace} onRelationships={setCoachingRelationships} />}
+          {!tablet && <BottomNav active={activeTab} locale={locale} tablet={false} compact={compactLandscape} onChange={changeTab} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} />}
         </View>
       </View>
       <RecipeDetail recipe={selectedLive} visible={!!selectedLive} locale={locale} tablet={tablet} unitSystem={unitSystem} onClose={() => setSelectedRecipe(null)} onFavorite={toggleFavorite} onDelete={deleteRecipe} onEdit={editRecipe} onDuplicate={duplicateRecipe} onShare={shareRecipe} onCook={(recipe) => { setSelectedRecipe(null); setCookingRecipe(recipe); }} onAddShopping={(recipe) => { addRecipeToShopping(recipe); Alert.alert('MauGainZ', t(locale, 'Added to your shopping list.', 'Toegevoegd aan je boodschappenlijst.')); }} />
       {cookingRecipe && <CookingMode recipe={cookingRecipe} locale={locale} onClose={() => setCookingRecipe(null)} />}
-      <SettingsModal visible={settingsVisible} locale={locale} categories={customCategories} goals={goals} unitSystem={unitSystem} backupText={backupText} cloudReady={cloudConfigured} syncCode={syncCode} lastSyncedAt={lastSyncedAt} onSyncCode={setSyncCode} onCloudUpload={cloudUpload} onCloudDownload={cloudDownload} onClose={() => setSettingsVisible(false)} onGoals={setGoals} onUnitSystem={setUnitSystem} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} onRenameCategory={renameCategory} onDeleteCategory={deleteCategory} onCategoryStyle={styleCategory} onExport={exportBackup} onImport={importBackup} />
+      <SettingsModal visible={settingsVisible} locale={locale} categories={customCategories} goals={goals} unitSystem={unitSystem} backupText={backupText} cloudReady={cloudConfigured} syncCode={syncCode} lastSyncedAt={lastSyncedAt} onSyncCode={setSyncCode} onCloudUpload={cloudUpload} onCloudDownload={cloudDownload} onClose={() => setSettingsVisible(false)} onGoals={(value) => { if (!requireWorkspaceEdit()) return; setGoals(value); }} onUnitSystem={(value) => { if (!requireWorkspaceEdit()) return; setUnitSystem(value); }} onToggleLocale={() => setLocale((current) => current === 'en' ? 'nl' : 'en')} onRenameCategory={(oldName, newName) => { if (!requireWorkspaceEdit()) return; renameCategory(oldName, newName); }} onDeleteCategory={(name) => { if (!requireWorkspaceEdit()) return; deleteCategory(name); }} onCategoryStyle={(name, color, categoryIcon) => { if (!requireWorkspaceEdit()) return; styleCategory(name, color, categoryIcon); }} onExport={exportBackup} onImport={(json) => { if (!requireWorkspaceEdit()) return; importBackup(json); }} />
       <UpdateModal update={availableUpdate} locale={locale} onClose={() => setAvailableUpdate(null)} />
     </SafeAreaView>
   );
@@ -1265,6 +1300,13 @@ export default function App() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   mainContent: { flex: 1, minWidth: 0 },
+  coachWorkspaceBar: { minHeight: 54, backgroundColor: '#D7B95C', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 40 },
+  coachWorkspaceBarActive: { backgroundColor: colors.lime },
+  coachWorkspaceText: { flex: 1, minWidth: 0 },
+  coachWorkspaceTitle: { color: colors.black, fontSize: 11, fontWeight: '900' },
+  coachWorkspaceSubtitle: { color: '#3A2E12', fontSize: 8, fontWeight: '700', marginTop: 2 },
+  coachWorkspaceExit: { minHeight: 34, borderRadius: 11, backgroundColor: colors.black, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  coachWorkspaceExitText: { color: colors.cream, fontSize: 8, fontWeight: '900' },
   safeArea: { flex: 1, backgroundColor: colors.bg },
   tabletAppFrame: { width: '100%', alignSelf: 'stretch', flexDirection: 'row' },
   screenContent: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 124 },

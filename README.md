@@ -22,6 +22,8 @@ MauGainZ checks the latest official GitHub release when the app starts. When a n
 - Import recipe JSON-LD from websites, scan printed recipes locally with ML Kit OCR, or paste free-form English/Dutch recipe text.
 - Email/password accounts synchronize recipes, diary entries, targets, progress, meal plans, ingredients, vitamins, and training days across phone, tablet, and desktop.
 - Friend codes support friend requests and deliberate recipe sharing without exposing private diary or weight data.
+- Coach Mode lets an athlete approve either review-only access or fully managed access for a coach. A fully managed coach can maintain recipes, nutrition targets, meal plans, supplements, ingredients, and training from Android or the web dashboard; the athlete keeps meal-diary, shopping check-off, supplement check-off, and weight logging access.
+- Coach access is revocable by either account. Firestore rules require an accepted relationship before a coach can read a workspace and fully managed permission before a coach can write to it.
 
 ## Firebase account backend
 

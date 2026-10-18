@@ -42,6 +42,22 @@ export type SharedRecipe = {
   createdAt: number;
 };
 
+export type CoachingMode = 'shared' | 'managed';
+
+export type CoachingRelationship = {
+  id: string;
+  coachUid: string;
+  coachName: string;
+  coachCode: string;
+  clientUid: string;
+  clientName: string;
+  clientCode: string;
+  mode: CoachingMode;
+  status: 'pending' | 'accepted' | 'rejected' | 'revoked';
+  createdAt: number;
+  acceptedAt?: number;
+};
+
 type FirestoreField = { stringValue?: string; integerValue?: string; timestampValue?: string; booleanValue?: boolean };
 type FirestoreDocument = { name?: string; fields?: Record<string, FirestoreField> };
 
@@ -147,8 +163,43 @@ export async function sendPasswordReset(email: string) {
 
 export async function uploadAccountData(payload: BackupPayload) {
   const auth = await validAuth();
-  const response = await fetch(documentUrl(`users/${auth.uid}/data/main`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: { payload: { stringValue: JSON.stringify(payload) }, updatedAt: { timestampValue: new Date().toISOString() }, schemaVersion: { integerValue: String(payload.version) } } }) });
+  return uploadAccountDataFor(auth.uid, payload, auth);
+}
+
+export async function uploadManagedAthleteData(payload: BackupPayload) {
+  const auth = await validAuth();
+  const cloud = await downloadAccountDataFor(auth.uid, auth);
+  if (!cloud?.payload) return uploadAccountDataFor(auth.uid, payload, auth);
+
+  const localVitaminDates = new Map((payload.vitamins ?? []).map((item) => [item.id, item.takenDates]));
+  const localShoppingState = new Map((payload.shopping ?? []).map((item) => [item.id, item.checked]));
+  const merged: BackupPayload = {
+    ...cloud.payload,
+    version: Math.max(cloud.payload.version ?? 0, payload.version ?? 0),
+    unitSystem: payload.unitSystem,
+    diaryEntries: payload.diaryEntries ?? [],
+    weights: payload.weights ?? [],
+    vitamins: (cloud.payload.vitamins ?? []).map((item) => ({
+      ...item,
+      takenDates: localVitaminDates.get(item.id) ?? item.takenDates
+    })),
+    shopping: (cloud.payload.shopping ?? []).map((item) => ({
+      ...item,
+      checked: localShoppingState.get(item.id) ?? item.checked
+    }))
+  };
+  return uploadAccountDataFor(auth.uid, merged, auth);
+}
+
+export async function uploadManagedClientData(clientUid: string, payload: BackupPayload) {
+  const auth = await validAuth();
+  return uploadAccountDataFor(clientUid, payload, auth);
+}
+
+async function uploadAccountDataFor(ownerUid: string, payload: BackupPayload, auth: StoredAuth) {
+  const response = await fetch(documentUrl(`users/${ownerUid}/data/main`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: { payload: { stringValue: JSON.stringify(payload) }, updatedAt: { timestampValue: new Date().toISOString() }, schemaVersion: { integerValue: String(payload.version) } } }) });
   if (!response.ok) throw new Error('sync');
+  if (ownerUid !== auth.uid) return Date.now();
   const profileFields = ['lastSeen', 'platform', 'appVersion', 'recipeCount', 'diaryEntryCount', 'savedIngredientCount'];
   await fetch(`${documentUrl(`accountProfiles/${auth.uid}`)}?${profileFields.map((field) => `updateMask.fieldPaths=${field}`).join('&')}`, {
     method: 'PATCH',
@@ -172,13 +223,22 @@ export async function getAccountDataOwner() {
 
 export async function downloadAccountData(): Promise<{ payload: BackupPayload; updatedAt: number } | null> {
   const auth = await validAuth();
-  const response = await fetch(documentUrl(`users/${auth.uid}/data/main`), { headers: authHeaders(auth.idToken) });
+  return downloadAccountDataFor(auth.uid, auth);
+}
+
+export async function downloadManagedClientData(clientUid: string): Promise<{ payload: BackupPayload; updatedAt: number } | null> {
+  const auth = await validAuth();
+  return downloadAccountDataFor(clientUid, auth);
+}
+
+async function downloadAccountDataFor(ownerUid: string, auth: StoredAuth): Promise<{ payload: BackupPayload; updatedAt: number } | null> {
+  const response = await fetch(documentUrl(`users/${ownerUid}/data/main`), { headers: authHeaders(auth.idToken) });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('sync');
   const document = await response.json() as FirestoreDocument;
   const payload = textField(document, 'payload');
   if (!payload) return null;
-  await AsyncStorage.setItem(DATA_OWNER_KEY, auth.uid);
+  if (ownerUid === auth.uid) await AsyncStorage.setItem(DATA_OWNER_KEY, auth.uid);
   return { payload: JSON.parse(payload) as BackupPayload, updatedAt: timeField(document, 'updatedAt') };
 }
 
@@ -241,4 +301,63 @@ export async function markSharedRecipeAccepted(id: string) {
   const auth = await validAuth();
   const response = await fetch(`${documentUrl(`recipeShares/${id}`)}?updateMask.fieldPaths=status&updateMask.fieldPaths=acceptedAt`, { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: { status: { stringValue: 'accepted' }, acceptedAt: { timestampValue: new Date().toISOString() } } }) });
   if (!response.ok) throw new Error('share');
+}
+
+const coachingFromDocument = (document: FirestoreDocument): CoachingRelationship => ({
+  id: docId(document),
+  coachUid: textField(document, 'coachUid'),
+  coachName: textField(document, 'coachName'),
+  coachCode: textField(document, 'coachCode'),
+  clientUid: textField(document, 'clientUid'),
+  clientName: textField(document, 'clientName'),
+  clientCode: textField(document, 'clientCode'),
+  mode: textField(document, 'mode') === 'managed' ? 'managed' : 'shared',
+  status: (['accepted', 'rejected', 'revoked'].includes(textField(document, 'status')) ? textField(document, 'status') : 'pending') as CoachingRelationship['status'],
+  createdAt: timeField(document, 'createdAt'),
+  acceptedAt: timeField(document, 'acceptedAt') || undefined
+});
+
+export async function listCoachingRelationships(): Promise<CoachingRelationship[]> {
+  const auth = await validAuth();
+  const [asCoach, asClient] = await Promise.all([
+    runFieldQuery('coachingRelationships', 'coachUid', auth.uid),
+    runFieldQuery('coachingRelationships', 'clientUid', auth.uid)
+  ]);
+  const unique = new Map<string, CoachingRelationship>();
+  [...asCoach, ...asClient].forEach((document) => unique.set(docId(document), coachingFromDocument(document)));
+  return [...unique.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function sendCoachingInvite(clientCode: string, mode: CoachingMode) {
+  const auth = await validAuth();
+  const code = clientCode.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const lookup = await fetch(documentUrl(`friendCodes/${code}`), { headers: authHeaders(auth.idToken) });
+  if (lookup.status === 404) throw new Error('client-not-found');
+  if (!lookup.ok) throw new Error('coach');
+  const target = await lookup.json() as FirestoreDocument;
+  const clientUid = textField(target, 'uid');
+  if (!clientUid || clientUid === auth.uid) throw new Error('self');
+  const id = `${auth.uid}_${clientUid}`;
+  const response = await fetch(documentUrl(`coachingRelationships/${id}`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: {
+    coachUid: { stringValue: auth.uid }, coachName: { stringValue: auth.displayName }, coachCode: { stringValue: auth.friendCode },
+    clientUid: { stringValue: clientUid }, clientName: { stringValue: textField(target, 'displayName') }, clientCode: { stringValue: code },
+    mode: { stringValue: mode }, status: { stringValue: 'pending' }, createdAt: { timestampValue: new Date().toISOString() }
+  } }) });
+  if (!response.ok) throw new Error('coach');
+}
+
+export async function respondToCoachingInvite(id: string, accept: boolean) {
+  const auth = await validAuth();
+  const fields = accept ? {
+    status: { stringValue: 'accepted' }, acceptedAt: { timestampValue: new Date().toISOString() }
+  } : { status: { stringValue: 'rejected' } };
+  const masks = accept ? 'updateMask.fieldPaths=status&updateMask.fieldPaths=acceptedAt' : 'updateMask.fieldPaths=status';
+  const response = await fetch(`${documentUrl(`coachingRelationships/${id}`)}?${masks}`, { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields }) });
+  if (!response.ok) throw new Error('coach');
+}
+
+export async function revokeCoachingRelationship(id: string) {
+  const auth = await validAuth();
+  const response = await fetch(`${documentUrl(`coachingRelationships/${id}`)}?updateMask.fieldPaths=status&updateMask.fieldPaths=revokedAt`, { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: { status: { stringValue: 'revoked' }, revokedAt: { timestampValue: new Date().toISOString() } } }) });
+  if (!response.ok) throw new Error('coach');
 }
