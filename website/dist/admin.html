@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0c09">
+  <meta name="robots" content="noindex,nofollow">
+  <title>MauGainZ Admin</title>
+  <link rel="icon" href="assets/maugainz-mark.png" type="image/png">
+  <link rel="stylesheet" href="admin.css">
+  <script defer src="site-config.js"></script>
+  <script type="module" src="admin.js"></script>
+</head>
+<body>
+  <div class="loading" data-loading><img src="assets/maugainz-mark.png" alt="MauGainZ"><span></span></div>
+
+  <main class="gate" data-auth hidden>
+    <a class="brand" href="index.html"><img src="assets/maugainz-mark.png" alt=""><b>MauGain<span>Z</span></b></a>
+    <section class="gate-copy"><span class="eyebrow">OWNER CONTROL</span><h1>The athlete<br><em>overview.</em></h1><p>A private, read-only account overview for the MauGainZ owner. Personal meal, weight and nutrition records remain private.</p></section>
+    <section class="login-card"><span class="eyebrow">ADMIN SIGN-IN</span><h2>Use your MauGainZ account</h2><form data-login-form><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" minlength="6" required></label><p data-login-error></p><button type="submit">OPEN DASHBOARD <span>→</span></button></form><a href="app.html">← Back to web app</a></section>
+  </main>
+
+  <main class="denied" data-denied hidden><img src="assets/maugainz-mark.png" alt=""><span class="eyebrow">ACCESS DENIED</span><h1>This account is not an administrator.</h1><p>The user directory is protected by Firebase rules. Sign in with the authorized owner account.</p><div><button data-denied-signout>USE ANOTHER ACCOUNT</button><a href="app.html">BACK TO APP</a></div></main>
+
+  <div class="admin" data-admin hidden>
+    <aside>
+      <a class="brand" href="index.html"><img src="assets/maugainz-mark.png" alt=""><b>MauGain<span>Z</span></b></a>
+      <div class="owner-badge"><span>ADMINISTRATOR</span><b data-admin-email></b><small>Read-only account access</small></div>
+      <nav><a class="active" href="#users"><span>◫</span>Users</a><a href="app.html"><span>⌂</span>Web app</a><a href="index.html"><span>↗</span>Website</a></nav>
+      <button class="signout" data-signout>Sign out</button>
+    </aside>
+    <section class="workspace" id="users">
+      <header><div><span class="eyebrow">MAUGAINZ ADMIN</span><h1>User dashboard</h1><p>Account activity without access to private meal, weight or recipe content.</p></div><div class="live"><i></i><span>LIVE FIRESTORE</span></div></header>
+      <section class="stats"><article><span>TOTAL ACCOUNTS</span><b data-total>0</b><small>Registered profiles</small></article><article><span>ACTIVE 7 DAYS</span><b data-active>0</b><small>Recent check-ins</small></article><article><span>ANDROID</span><b data-android>0</b><small>Last used on phone/tablet</small></article><article><span>WEB</span><b data-web>0</b><small>Last used on desktop</small></article></section>
+      <section class="panel">
+        <div class="panel-head"><div><span class="eyebrow">ACCOUNT DIRECTORY</span><h2>All MauGainZ users</h2></div><div class="tools"><select data-filter><option value="all">All users</option><option value="active">Active this week</option><option value="android">Android</option><option value="web">Web</option><option value="pending">Awaiting check-in</option></select><input data-search type="search" placeholder="Search name, email or friend code"></div></div>
+        <div class="privacy-note"><b>Private by design.</b> This dashboard shows account and aggregate usage metadata only. Diary entries, body weight, meal plans and recipe contents cannot be opened here.</div>
+        <div class="table-wrap"><table><thead><tr><th>User</th><th>Status</th><th>Last active</th><th>Platform</th><th>App version</th><th>Recipes</th><th>Diary</th><th>Ingredients</th></tr></thead><tbody data-users></tbody></table></div>
+        <div class="empty" data-empty hidden>No matching accounts found.</div>
+        <footer><span data-visible-count>0 users</span><small>Older profiles receive detailed usage totals the next time they sign in or synchronize.</small></footer>
+      </section>
+    </section>
+  </div>
+</body>
+</html>

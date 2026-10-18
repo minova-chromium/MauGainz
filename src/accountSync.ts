@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BackupPayload } from './cloudSync';
 import { firebaseConfig } from './firebaseConfig';
 import { Recipe } from './types';
+import { APP_VERSION } from './updater';
 
 const API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? firebaseConfig.apiKey;
 const PROJECT_ID = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? firebaseConfig.projectId;
@@ -83,11 +84,31 @@ async function writeProfile(auth: StoredAuth) {
   const now = new Date().toISOString();
   const profile = { fields: { uid: { stringValue: auth.uid }, displayName: { stringValue: auth.displayName }, friendCode: { stringValue: auth.friendCode }, updatedAt: { timestampValue: now } } };
   const code = { fields: { uid: { stringValue: auth.uid }, displayName: { stringValue: auth.displayName }, friendCode: { stringValue: auth.friendCode }, updatedAt: { timestampValue: now } } };
-  const [profileResponse, codeResponse] = await Promise.all([
+  const accountUrl = documentUrl(`accountProfiles/${auth.uid}`);
+  const existingAccount = await fetch(accountUrl, { headers: authHeaders(auth.idToken) });
+  const existingDocument = existingAccount.ok ? await existingAccount.json() as FirestoreDocument : undefined;
+  const createdAt = existingDocument ? (existingDocument.fields?.createdAt?.timestampValue ?? now) : now;
+  const account = { fields: {
+    uid: { stringValue: auth.uid },
+    email: { stringValue: auth.email },
+    displayName: { stringValue: auth.displayName },
+    friendCode: { stringValue: auth.friendCode },
+    createdAt: { timestampValue: createdAt },
+    lastSeen: { timestampValue: now },
+    platform: { stringValue: 'android' },
+    appVersion: { stringValue: APP_VERSION },
+    recipeCount: { integerValue: existingDocument?.fields?.recipeCount?.integerValue ?? '0' },
+    diaryEntryCount: { integerValue: existingDocument?.fields?.diaryEntryCount?.integerValue ?? '0' },
+    savedIngredientCount: { integerValue: existingDocument?.fields?.savedIngredientCount?.integerValue ?? '0' }
+  } };
+  const [profileResponse, codeResponse, accountResponse] = await Promise.all([
     fetch(documentUrl(`publicProfiles/${auth.uid}`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify(profile) }),
-    fetch(documentUrl(`friendCodes/${auth.friendCode}`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify(code) })
+    fetch(documentUrl(`friendCodes/${auth.friendCode}`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify(code) }),
+    fetch(accountUrl, { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify(account) })
   ]);
   if (!profileResponse.ok || !codeResponse.ok) throw new Error('profile');
+  // Account analytics are best-effort and must never block sign-in.
+  if (!accountResponse.ok) console.warn('MauGainZ account activity check-in failed.');
 }
 
 export async function signUpAccount(email: string, password: string, displayName: string): Promise<AccountUser> {
@@ -128,6 +149,19 @@ export async function uploadAccountData(payload: BackupPayload) {
   const auth = await validAuth();
   const response = await fetch(documentUrl(`users/${auth.uid}/data/main`), { method: 'PATCH', headers: authHeaders(auth.idToken), body: JSON.stringify({ fields: { payload: { stringValue: JSON.stringify(payload) }, updatedAt: { timestampValue: new Date().toISOString() }, schemaVersion: { integerValue: String(payload.version) } } }) });
   if (!response.ok) throw new Error('sync');
+  const profileFields = ['lastSeen', 'platform', 'appVersion', 'recipeCount', 'diaryEntryCount', 'savedIngredientCount'];
+  await fetch(`${documentUrl(`accountProfiles/${auth.uid}`)}?${profileFields.map((field) => `updateMask.fieldPaths=${field}`).join('&')}`, {
+    method: 'PATCH',
+    headers: authHeaders(auth.idToken),
+    body: JSON.stringify({ fields: {
+      lastSeen: { timestampValue: new Date().toISOString() },
+      platform: { stringValue: 'android' },
+      appVersion: { stringValue: APP_VERSION },
+      recipeCount: { integerValue: String(payload.recipes?.length ?? 0) },
+      diaryEntryCount: { integerValue: String(payload.diaryEntries?.length ?? 0) },
+      savedIngredientCount: { integerValue: String(payload.savedIngredients?.length ?? 0) }
+    } })
+  });
   await AsyncStorage.setItem(DATA_OWNER_KEY, auth.uid);
   return Date.now();
 }

@@ -10,6 +10,8 @@ The official product site is published through GitHub Pages at [minova-chromium.
 
 The site also includes a desktop account dashboard at [`/app.html`](https://minova-chromium.github.io/MauGainz/app.html). The same email/password account works in Android and on the web, with private Firestore synchronization and opt-in recipe sharing between friends.
 
+The owner-only account overview is available at [`/admin.html`](https://minova-chromium.github.io/MauGainz/admin.html). Firebase rules restrict the directory to the configured administrator. It exposes account activity and aggregate item counts only; private recipes, meals, body weight and planning data remain inaccessible.
+
 MauGainZ checks the latest official GitHub release when the app starts. When a newer semantic version is available, an in-app English/Dutch update screen links directly to the universal APK. Android always keeps the final installation confirmation under the user's control.
 
 ## Smart features
