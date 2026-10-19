@@ -26,18 +26,25 @@
     <aside>
       <a class="brand" href="index.html"><img src="assets/maugainz-mark.png" alt=""><b>MauGain<span>Z</span></b></a>
       <div class="owner-badge"><span>ADMINISTRATOR</span><b data-admin-email></b><small>Read-only account access</small></div>
-      <nav><a class="active" href="#users"><span>◫</span>Users</a><a href="app.html"><span>⌂</span>Web app</a><a href="index.html"><span>↗</span>Website</a></nav>
+      <nav><a class="active" href="#users"><span>◫</span>Users</a><a href="#coaching"><span>◎</span>Coaching</a><a href="app.html"><span>⌂</span>Web app</a><a href="index.html"><span>↗</span>Website</a></nav>
       <button class="signout" data-signout>Sign out</button>
     </aside>
     <section class="workspace" id="users">
-      <header><div><span class="eyebrow">MAUGAINZ ADMIN</span><h1>User dashboard</h1><p>Account activity without access to private meal, weight or recipe content.</p></div><div class="live"><i></i><span>LIVE FIRESTORE</span></div></header>
-      <section class="stats"><article><span>TOTAL ACCOUNTS</span><b data-total>0</b><small>Registered profiles</small></article><article><span>ACTIVE 7 DAYS</span><b data-active>0</b><small>Recent check-ins</small></article><article><span>ANDROID</span><b data-android>0</b><small>Last used on phone/tablet</small></article><article><span>WEB</span><b data-web>0</b><small>Last used on desktop</small></article></section>
+      <header><div><span class="eyebrow">MAUGAINZ ADMIN</span><h1>User dashboard</h1><p>Account activity, friend codes and coaching connections without access to private health content.</p></div><div class="live"><i></i><span>LIVE FIRESTORE</span></div></header>
+      <section class="stats"><article><span>TOTAL ACCOUNTS</span><b data-total>0</b><small>Registered profiles</small></article><article><span>ACTIVE 7 DAYS</span><b data-active>0</b><small>Recent check-ins</small></article><article><span>ACTIVE COACHING</span><b data-coaching-active>0</b><small>Accepted connections</small></article><article><span>PENDING</span><b data-coaching-pending>0</b><small>Awaiting athlete approval</small></article><article><span>ANDROID</span><b data-android>0</b><small>Last used on phone/tablet</small></article><article><span>WEB</span><b data-web>0</b><small>Last used on desktop</small></article></section>
       <section class="panel">
         <div class="panel-head"><div><span class="eyebrow">ACCOUNT DIRECTORY</span><h2>All MauGainZ users</h2></div><div class="tools"><select data-filter><option value="all">All users</option><option value="active">Active this week</option><option value="android">Android</option><option value="web">Web</option><option value="pending">Awaiting check-in</option></select><input data-search type="search" placeholder="Search name, email or friend code"></div></div>
         <div class="privacy-note"><b>Private by design.</b> This dashboard shows account and aggregate usage metadata only. Diary entries, body weight, meal plans and recipe contents cannot be opened here.</div>
-        <div class="table-wrap"><table><thead><tr><th>User</th><th>Status</th><th>Last active</th><th>Platform</th><th>App version</th><th>Recipes</th><th>Diary</th><th>Ingredients</th></tr></thead><tbody data-users></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>User</th><th>Friend code</th><th>Status</th><th>Last active</th><th>Platform</th><th>App version</th><th>Recipes</th><th>Diary</th><th>Ingredients</th></tr></thead><tbody data-users></tbody></table></div>
         <div class="empty" data-empty hidden>No matching accounts found.</div>
         <footer><span data-visible-count>0 users</span><small>Older profiles receive detailed usage totals the next time they sign in or synchronize.</small></footer>
+      </section>
+      <section class="panel coaching-panel" id="coaching">
+        <div class="panel-head"><div><span class="eyebrow">COACHING DIRECTORY</span><h2>Who is coaching who</h2></div><div class="tools"><select data-coaching-filter><option value="all">All relationships</option><option value="accepted">Active coaching</option><option value="pending">Pending approval</option><option value="revoked">Revoked</option><option value="rejected">Rejected</option></select><input data-coaching-search type="search" placeholder="Search coach, athlete or code"></div></div>
+        <div class="relationship-summary"><div><span class="summary-dot accepted"></span><b data-coach-count>0</b><small>active coaches</small></div><div><span class="summary-dot managed"></span><b data-managed-count>0</b><small>fully managed athletes</small></div><p>Relationships are read-only here. Athletes remain responsible for approving or revoking coach access.</p></div>
+        <div class="table-wrap"><table class="coaching-table"><thead><tr><th>Coach</th><th></th><th>Athlete</th><th>Access</th><th>Status</th><th>Started</th><th>Last change</th></tr></thead><tbody data-coaching></tbody></table></div>
+        <div class="empty" data-coaching-empty hidden>No matching coaching relationships found.</div>
+        <footer><span data-coaching-count>0 relationships</span><small>Includes pending, accepted, rejected and revoked connections.</small></footer>
       </section>
     </section>
   </div>
