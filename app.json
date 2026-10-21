@@ -2,7 +2,7 @@
   "expo": {
     "name": "MauGainZ",
     "slug": "maugains",
-    "version": "2.5.0",
+    "version": "2.5.1",
     "orientation": "default",
     "icon": "./assets/branding/maugainz-v3-mark.png",
     "splash": {
@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.maugains.cookbook",
-      "versionCode": 20,
+      "versionCode": 21,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/branding/maugainz-v3-mark.png",
