@@ -42,7 +42,7 @@ export type Recipe = {
   stepTimers?: number[];
 };
 
-export type TabName = 'home' | 'recipes' | 'diary' | 'create' | 'planner' | 'macros' | 'friends';
+export type TabName = 'home' | 'recipes' | 'diary' | 'weight' | 'create' | 'planner' | 'macros' | 'friends';
 
 export type Locale = 'en' | 'nl';
 
