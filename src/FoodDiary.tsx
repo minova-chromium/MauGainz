@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { DailyMacroTarget, FoodDiaryEntry, Ingredient, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, UserGoals } from './types';
+import { DailyMacroTarget, FoodDiaryEntry, Ingredient, Locale, Macros, MealPlanEntry, Recipe, SavedIngredient, UserGoals, WeightEntry } from './types';
 import { baseIngredientProfiles } from './nutrition';
 import { IngredientLookupModal, IngredientMacroReviewModal } from './SmartModals';
 import { colors, radius } from './theme';
@@ -131,7 +131,7 @@ function FoodPicker({ visible, locale, meal, recipes, savedIngredients, onSavedI
   </Modal><IngredientLookupModal visible={lookupVisible} locale={locale} onClose={() => setLookupVisible(false)} onSelect={reviewProduct} onBarcodeNotFound={(barcode) => newProduct(barcode)} /><IngredientMacroReviewModal visible={!!productDraft} locale={locale} ingredient={productDraft} onClose={() => setProductDraft(null)} onConfirm={saveProduct} /></>;
 }
 
-export function FoodDiaryScreen({ locale, tablet, recipes, entries, savedIngredients, onSavedIngredients, goals, dailyTargets, plans, onChange, onOpenRecipe }: {
+export function FoodDiaryScreen({ locale, tablet, recipes, entries, savedIngredients, onSavedIngredients, goals, dailyTargets, plans, weights, onChange, onOpenRecipe, onOpenWeight }: {
   locale: Locale;
   tablet: boolean;
   recipes: Recipe[];
@@ -141,8 +141,10 @@ export function FoodDiaryScreen({ locale, tablet, recipes, entries, savedIngredi
   goals: UserGoals;
   dailyTargets: DailyMacroTarget[];
   plans: MealPlanEntry[];
+  weights: WeightEntry[];
   onChange: (entries: FoodDiaryEntry[]) => void;
   onOpenRecipe: (recipe: Recipe) => void;
+  onOpenWeight: (date: string) => void;
 }) {
   const [selectedDate, setSelectedDate] = useState(todayKey());
   const [pickerMeal, setPickerMeal] = useState<MealPlanEntry['meal'] | null>(null);
@@ -152,6 +154,7 @@ export function FoodDiaryScreen({ locale, tablet, recipes, entries, savedIngredi
   const weekday = selectedDateObject.getDay();
   const target = dailyTargets.find((item) => item.weekday === weekday) ?? { weekday, calories: goals.calories, protein: goals.protein, carbs: goals.carbs, fat: goals.fat, fiber: 30 };
   const planned = plans.filter((entry) => entry.date === selectedDate);
+  const dayWeight = weights.find((entry) => entry.date === selectedDate);
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => { const date = dateFromKey(selectedDate); date.setDate(date.getDate() + index - 3); return date; }), [selectedDate]);
   const shiftDay = (amount: number) => { const next = dateFromKey(selectedDate); next.setDate(next.getDate() + amount); setSelectedDate(dateKey(next)); };
   const addEntry = (entry: FoodDiaryEntry) => onChange([...entries, { ...entry, date: selectedDate }]);
@@ -173,6 +176,7 @@ export function FoodDiaryScreen({ locale, tablet, recipes, entries, savedIngredi
 
       <View style={s.dateBar}><Pressable onPress={() => shiftDay(-1)} style={s.dateArrow}>{ico('chevron-back', 21)}</Pressable><Pressable onPress={() => setSelectedDate(todayKey())} style={s.dateCenter}><Text style={s.dateTitle}>{selectedDateObject.toLocaleDateString(locale === 'nl' ? 'nl-BE' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</Text><Text style={s.dateHint}>{selectedDate === todayKey() ? tr(locale, 'TODAY', 'VANDAAG') : tr(locale, 'TAP FOR TODAY', 'TIK VOOR VANDAAG')}</Text></Pressable><Pressable onPress={() => shiftDay(1)} style={s.dateArrow}>{ico('chevron-forward', 21)}</Pressable></View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.weekStrip}>{days.map((date) => { const key = dateKey(date); const active = key === selectedDate; const hasEntries = entries.some((entry) => entry.date === key); return <Pressable key={key} onPress={() => setSelectedDate(key)} style={[s.dayChip, active && s.dayChipActive]}><Text style={[s.dayChipName, active && s.dark]}>{date.toLocaleDateString(locale === 'nl' ? 'nl-BE' : 'en-GB', { weekday: 'short' }).toUpperCase()}</Text><Text style={[s.dayChipNumber, active && s.dark]}>{date.getDate()}</Text>{hasEntries && <View style={[s.dayDot, active && s.dayDotActive]} />}</Pressable>; })}</ScrollView>
+      <Pressable onPress={() => onOpenWeight(selectedDate)} style={s.linkedWeight}><View style={s.linkedWeightIcon}>{ico('scale-outline', 22, colors.black)}</View><View style={s.flex}><Text style={s.linkedWeightLabel}>{tr(locale, 'WEIGHT FOR THIS DAY', 'GEWICHT VAN DEZE DAG')}</Text><Text style={s.linkedWeightValue}>{dayWeight ? `${dayWeight.weightKg.toFixed(1)} kg` : tr(locale, 'No weigh-in logged', 'Geen weging geregistreerd')}</Text></View><Text style={s.linkedWeightAction}>{dayWeight ? tr(locale, 'VIEW', 'BEKIJK') : tr(locale, 'ADD', 'VOEG TOE')}</Text>{ico('chevron-forward', 18, colors.lime)}</Pressable>
 
       <View style={[s.contentGrid, tablet && s.contentGridTablet]}>
         <View style={[s.summaryCard, tablet && s.summaryTablet]}>
@@ -203,6 +207,7 @@ const s = StyleSheet.create({
   dateArrow: { width: 52, height: 64, alignItems: 'center', justifyContent: 'center' }, dateCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dateTitle: { color: colors.cream, fontSize: 15, fontWeight: '900', textTransform: 'capitalize' }, dateHint: { color: colors.lime, fontSize: 7, fontWeight: '900', letterSpacing: 1, marginTop: 4 },
   weekStrip: { gap: 8, paddingVertical: 14 }, dayChip: { width: 62, height: 66, borderRadius: 16, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }, dayChipActive: { backgroundColor: colors.lime, borderColor: colors.lime }, dayChipName: { color: colors.muted, fontSize: 8, fontWeight: '900' }, dayChipNumber: { color: colors.cream, fontSize: 19, fontWeight: '900', marginTop: 3 }, dayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.lime, marginTop: 4 }, dayDotActive: { backgroundColor: colors.black },
+  linkedWeight: { minHeight: 68, borderRadius: 18, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 13, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }, linkedWeightIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }, linkedWeightLabel: { color: colors.lime, fontSize: 7, fontWeight: '900', letterSpacing: .9 }, linkedWeightValue: { color: colors.cream, fontSize: 13, fontWeight: '900', marginTop: 4 }, linkedWeightAction: { color: colors.lime, fontSize: 8, fontWeight: '900', letterSpacing: .5 },
   contentGrid: { gap: 14 }, contentGridTablet: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 }, summaryTablet: { flex: .82 }, mealsTablet: { flex: 1.45 },
   summaryCard: { borderRadius: radius.lg, backgroundColor: '#CFA343', padding: 20, overflow: 'hidden' }, summaryTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }, cardEyebrow: { color: '#33280F', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 }, summaryCalories: { color: colors.black, fontSize: 48, fontWeight: '900', marginTop: 5 }, summaryTarget: { color: '#4C3B18', fontSize: 11, fontWeight: '900', letterSpacing: .4 }, bolt: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#F3F4F290', alignItems: 'center', justifyContent: 'center' }, kcalTrack: { height: 8, borderRadius: 4, backgroundColor: '#755A2480', overflow: 'hidden', marginTop: 20 }, kcalFill: { height: '100%', backgroundColor: colors.black }, summaryMacros: { flexDirection: 'row', marginTop: 22 }, summaryMacro: { flex: 1 }, summaryMacroValue: { color: colors.black, fontSize: 18, fontWeight: '900' }, summaryMacroGoal: { color: '#4C3B18', fontSize: 8, fontWeight: '900', marginTop: 2 }, summaryMacroLabel: { color: '#4C3B18', fontSize: 7, fontWeight: '900', letterSpacing: .6, marginTop: 5 }, remaining: { color: colors.black, fontSize: 11, fontWeight: '900', marginTop: 18 },
   planImport: { minHeight: 58, borderRadius: 16, backgroundColor: '#F3F4F2B8', marginTop: 16, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }, planImportTitle: { color: colors.black, fontSize: 9, fontWeight: '900', letterSpacing: .5 }, planImportMeta: { color: '#4C3B18', fontSize: 8, marginTop: 3 },

@@ -32,14 +32,15 @@ export function savedIngredientToRecipe(item: SavedIngredient): Ingredient {
   };
 }
 
-export function WeightDiaryScreen({ locale, tablet, weights, onWeights }: {
+export function WeightDiaryScreen({ locale, tablet, initialDate, weights, onWeights }: {
   locale: Locale;
   tablet: boolean;
+  initialDate: string;
   weights: WeightEntry[];
   onWeights: (items: WeightEntry[]) => void;
 }) {
   const sorted = useMemo(() => [...weights].sort((a, b) => b.date.localeCompare(a.date)), [weights]);
-  const [date, setDate] = useState(todayKey());
+  const [date, setDate] = useState(initialDate || todayKey());
   const [weight, setWeight] = useState(String(sorted[0]?.weightKg ?? ''));
   const chartEntries = [...sorted].slice(0, 14).reverse();
   const chartValues = chartEntries.map((entry) => entry.weightKg);
