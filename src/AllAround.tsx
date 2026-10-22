@@ -71,13 +71,14 @@ export function WeightDiaryScreen({ locale, tablet, initialDate, weights, onWeig
   </ScrollView>;
 }
 
-export function IngredientLibraryModal({ visible, locale, ingredients, onChange, onSelect, onClose }: {
+export function IngredientLibraryModal({ visible, locale, ingredients, onChange, onSelect, onClose, initialTab = 'base' }: {
   visible: boolean;
   locale: Locale;
   ingredients: SavedIngredient[];
   onChange: (items: SavedIngredient[]) => void;
   onSelect?: (ingredient: Ingredient) => void;
   onClose: () => void;
+  initialTab?: 'base' | 'mine';
 }) {
   const [activeTab, setActiveTab] = useState<'base' | 'mine'>('base');
   const [query, setQuery] = useState('');
@@ -89,6 +90,14 @@ export function IngredientLibraryModal({ visible, locale, ingredients, onChange,
   const [baseUnit, setBaseUnit] = useState<'g' | 'ml'>('g');
   const [servingSize, setServingSize] = useState('100');
   const [macro, setMacro] = useState<Record<keyof Macros, string>>({ calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+
+  useEffect(() => {
+    if (!visible) return;
+    setActiveTab(initialTab);
+    setQuery('');
+    setEditingId(null);
+    setEditingBase(null);
+  }, [visible, initialTab]);
 
   const reset = () => { setEditingId(null); setEditingBase(null); setName(''); setBrand(''); setBarcode(''); setBaseUnit('g'); setServingSize('100'); setMacro({ calories: '', protein: '', carbs: '', fat: '', fiber: '' }); };
   const overrideFor = (name: string, nameNl?: string) => ingredients.find((item) => normalize(item.name) === normalize(name) || (!!nameNl && normalize(item.nameNl ?? item.name) === normalize(nameNl)));

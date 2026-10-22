@@ -32,7 +32,7 @@ import { CookingMode, PlannerScreen, SettingsModal } from './src/ProFeatures';
 import { IngredientLookupModal, IngredientMacroReviewModal, RecipeImportModal } from './src/SmartModals';
 import { BackupPayload, cloudConfigured, createSyncCode, downloadCloudBackup, uploadCloudBackup } from './src/cloudSync';
 import { APP_VERSION, AppUpdate, checkForAppUpdate } from './src/updater';
-import { IngredientLibraryModal, PerformanceHub, WeightDiaryScreen } from './src/AllAround';
+import { IngredientLibraryModal, PerformanceHub, WeightDiaryScreen, savedIngredientToRecipe } from './src/AllAround';
 import { FoodDiaryScreen } from './src/FoodDiary';
 import { FriendsScreen } from './src/Friends';
 import { AccountUser, CoachingRelationship, downloadAccountData, downloadManagedClientData, getAccountDataOwner, listCoachingRelationships, restoreAccount, uploadAccountData, uploadManagedAthleteData, uploadManagedClientData } from './src/accountSync';
@@ -396,6 +396,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
   const [allergens, setAllergens] = useState<string[]>(initialRecipe?.allergens ?? []);
   const [lookupVisible, setLookupVisible] = useState(false);
   const [libraryVisible, setLibraryVisible] = useState(false);
+  const [libraryStartTab, setLibraryStartTab] = useState<'base' | 'mine'>('mine');
   const [importVisible, setImportVisible] = useState(false);
   const [macroIngredient, setMacroIngredient] = useState<Ingredient | null>(null);
   const [nutritionLoading, setNutritionLoading] = useState(false);
@@ -515,6 +516,19 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
     const bIndex = recentIngredientNames.indexOf(b.en);
     return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
   });
+
+  const searchableLibraryIngredients = useMemo(() => {
+    const same = (left: SavedIngredient, right: SavedIngredient) =>
+      (!!left.barcode && left.barcode === right.barcode) ||
+      normalizeSearch(left.name) === normalizeSearch(right.name) ||
+      (!!left.nameNl && normalizeSearch(left.nameNl) === normalizeSearch(right.nameNl ?? right.name));
+    const baseWithOverrides = baseIngredientProfiles.map((base) => savedIngredients.find((saved) => same(saved, base)) ?? base);
+    const own = savedIngredients.filter((saved) => !baseIngredientProfiles.some((base) => same(saved, base)));
+    return [...own, ...baseWithOverrides];
+  }, [savedIngredients]);
+  const filteredLibraryIngredients = ingredientQuery.trim()
+    ? searchableLibraryIngredients.filter((item) => normalizeSearch(`${item.name} ${item.nameNl ?? ''} ${item.brand ?? ''}`).includes(normalizeSearch(ingredientQuery)))
+    : searchableLibraryIngredients.filter((item) => savedIngredients.some((saved) => saved.id === item.id)).slice(0, tablet ? 12 : 8);
 
   const addCustomCategory = () => {
     const cleanCategory = newCategory.trim();
@@ -664,7 +678,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
           <TextInput
             value={ingredientQuery}
             onChangeText={setIngredientQuery}
-            placeholder={t(locale, `Search ${ingredientSuggestions.length} ingredients`, `Zoek in ${ingredientSuggestions.length} ingrediënten`)}
+            placeholder={t(locale, `Search all ingredients`, `Zoek in alle ingrediënten`)}
             placeholderTextColor={colors.muted}
             style={styles.searchInput}
           />
@@ -673,10 +687,20 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
         <Pressable onPress={() => setLookupVisible(true)} style={styles.smartIngredientButton}>
           {icon('barcode-outline', 20, colors.black)}<Text style={styles.smartIngredientText}>{t(locale, 'SCAN BARCODE OR SEARCH NUTRITION DATABASE', 'SCAN BARCODE OF ZOEK VOEDINGSDATABASE')}</Text>
         </Pressable>
-        <Pressable onPress={() => setLibraryVisible(true)} style={styles.ingredientLibraryButton}>
-          {icon('nutrition-outline', 20, colors.lime)}<Text style={styles.ingredientLibraryText}>{t(locale, 'FULL INGREDIENT LIBRARY', 'VOLLEDIGE INGREDIËNTENBIBLIOTHEEK')} · {baseIngredientProfiles.length} + {savedIngredients.length}</Text>
-        </Pressable>
+        <View style={styles.ingredientLibraryActions}>
+          <Pressable onPress={() => { setLibraryStartTab('mine'); setLibraryVisible(true); }} style={[styles.ingredientLibraryButton, styles.ingredientLibraryButtonHalf]}>
+            {icon('person-outline', 19, colors.lime)}<Text style={styles.ingredientLibraryText}>{t(locale, 'MY INGREDIENTS', 'MIJN INGREDIËNTEN')} · {savedIngredients.length}</Text>
+          </Pressable>
+          <Pressable onPress={() => { setLibraryStartTab('base'); setLibraryVisible(true); }} style={[styles.ingredientLibraryButton, styles.ingredientLibraryButtonHalf]}>
+            {icon('nutrition-outline', 19, colors.lime)}<Text style={styles.ingredientLibraryText}>{t(locale, 'MAUGAINZ BASE', 'MAUGAINZ STANDAARD')} · {baseIngredientProfiles.length}</Text>
+          </Pressable>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionScroller} contentContainerStyle={styles.suggestionRow}>
+          {filteredLibraryIngredients.slice(0, tablet ? 24 : 14).map((item) => (
+            <Pressable key={`library-${item.id}`} onPress={() => addIngredient(savedIngredientToRecipe(item))} style={[styles.suggestionChip, styles.savedSuggestionChip]}>
+              {icon('checkmark-circle', 14, colors.lime)}<Text style={styles.suggestionText}>{locale === 'nl' ? item.nameNl ?? item.name : item.name}</Text>
+            </Pressable>
+          ))}
           {filteredSuggestions.slice(0, tablet ? 24 : 14).map((item) => (
             <Pressable key={item.en} onPress={() => addSuggested(item)} style={styles.suggestionChip}>
               {icon('add', 14, colors.lime)}<Text style={styles.suggestionText}>{locale === 'nl' ? item.nl : item.en}</Text>
@@ -833,7 +857,7 @@ function BuilderScreen({ locale, tablet, landscape, wideLandscape, initialRecipe
       {!landscape && !keyboardVisible && <View style={[styles.builderSaveDock, tablet && styles.builderSaveDockTablet]} pointerEvents="box-none"><Pressable onPress={submit} style={({ pressed }) => [styles.builderDockButton, pressed && styles.pressed]}><Text style={styles.builderDockText}>{initialRecipe ? t(locale, 'SAVE CHANGES', 'WIJZIGINGEN OPSLAAN') : t(locale, 'SAVE RECIPE', 'RECEPT OPSLAAN')}</Text>{icon('checkmark', 20, colors.black)}</Pressable></View>}
       <IngredientLookupModal visible={lookupVisible} locale={locale} onClose={() => setLookupVisible(false)} onSelect={addIngredient} />
       <IngredientMacroReviewModal visible={!!macroIngredient} locale={locale} ingredient={macroIngredient} onClose={() => setMacroIngredient(null)} onConfirm={confirmIngredientMacros} />
-      <IngredientLibraryModal visible={libraryVisible} locale={locale} ingredients={savedIngredients} onChange={onSavedIngredients} onSelect={addIngredient} onClose={() => setLibraryVisible(false)} />
+      <IngredientLibraryModal visible={libraryVisible} locale={locale} ingredients={savedIngredients} onChange={onSavedIngredients} onSelect={addIngredient} onClose={() => setLibraryVisible(false)} initialTab={libraryStartTab} />
       <RecipeImportModal visible={importVisible} locale={locale} onClose={() => setImportVisible(false)} onImport={applyImport} />
     </KeyboardAvoidingView>
   );
@@ -1487,8 +1511,11 @@ const styles = StyleSheet.create({
   ingredientSearch: { height: 48, borderRadius: radius.md, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   smartIngredientButton: { minHeight: 44, borderRadius: radius.md, backgroundColor: colors.lime, paddingHorizontal: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   smartIngredientText: { color: colors.black, fontSize: 9, fontWeight: '900', letterSpacing: .25, textAlign: 'center' },
-  ingredientLibraryButton: { minHeight: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.lime, paddingHorizontal: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  ingredientLibraryActions: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  ingredientLibraryButton: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.lime, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  ingredientLibraryButtonHalf: { flex: 1 },
   ingredientLibraryText: { color: colors.lime, fontSize: 9, fontWeight: '900', letterSpacing: .25, textAlign: 'center' },
+  savedSuggestionChip: { borderColor: '#D2A74A88', backgroundColor: '#D2A74A12' },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: '#D2A74A10', borderColor: '#D2A74A2D', borderWidth: 1, borderRadius: radius.pill },
   suggestionText: { color: colors.cream, fontSize: 10, fontWeight: '700' },
   historyHint: { color: colors.muted, fontSize: 9, marginBottom: 9 },

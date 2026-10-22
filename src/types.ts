@@ -92,6 +92,7 @@ export type FoodDiaryEntry = {
   name: string;
   nameNl?: string;
   amount: number;
+  quantity?: number;
   unit: 'portion' | 'g' | 'ml';
   macros: Macros;
   createdAt: number;
